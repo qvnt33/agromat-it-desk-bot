@@ -1,25 +1,28 @@
-// Воркфлоу YouTrack: на створення задачі надсилати коротке повідомлення на бекенд
+// Воркфлоу YouTrack: на створення задачі надсилати коротке повідомлення на бекенд із секретом
 var entities = require('@jetbrains/youtrack-scripting-api/entities');
 var http = require('@jetbrains/youtrack-scripting-api/http');
 
+var WEBHOOK_BASE = 'WEBHOOK_URL'; // без суфікса /youtrack
+var SHARED_SECRET = 'WEBHOOK_SECRET'; // має збігатися з WEBHOOK_SECRET_YT на бекенді
+
 exports.rule = entities.Issue.onChange({
-  title: 'Post new issue to Telegram',
-  // Запускати дію лише на подію створення
+  title: 'Post new issue to Telegram with secret',
+
   guard: function(ctx) {
+    // Запускати тільки при створенні
     return ctx.issue.becomesReported;
   },
-  // Зібрати мінімальний пейлоад і надіслати на вебхук бекенда
   action: function(ctx) {
     var issue = ctx.issue;
 
-    // Обчислити читабельний ID навіть коли issue.idReadable ще порожній
+    // Обчислити читабельний ID навіть коли idReadable ще порожній
     var prjShort = (issue.project && (issue.project.shortName || issue.project.name)) || '';
     var computedId = '';
     if (issue.idReadable) {
       computedId = issue.idReadable;
-    } else if (prjShort && (issue.numberInProject !== undefined && issue.numberInProject !== null)) {
+    } else if (prjShort && issue.numberInProject != null) {
       computedId = prjShort + '-' + issue.numberInProject;
-    } else if (issue.id) {
+    } else if (issue.id != null) {
       computedId = String(issue.id);
     }
 
@@ -30,10 +33,12 @@ exports.rule = entities.Issue.onChange({
       url: issue.url || ''
     };
 
-    // Вказати базову адресу вебхука (заміни WEBHOOK_URL на свій)
-    var conn = new http.Connection('WEBHOOK_URL');
+    // Підготувати підключення та додати заголовки
+    var conn = new http.Connection(WEBHOOK_BASE);
     conn.addHeader('Content-Type', 'application/json');
+    conn.addHeader('Authorization', 'Bearer ' + SHARED_SECRET); // ключовий заголовок
 
+    // Відправити синхронно на бекенд
     conn.postSync('/youtrack', [], JSON.stringify(payload));
   },
   requirements: {}

@@ -20,6 +20,9 @@ DESCRIPTION_MAX_LEN: int = int(os.getenv('DESCRIPTION_MAX_LEN', '500'))
 # Секрет для перевірки Telegram вебхука (X-Telegram-Bot-Api-Secret-Token)
 TELEGRAM_WEBHOOK_SECRET: str | None = os.getenv('TELEGRAM_WEBHOOK_SECRET')
 
+# Секрет для перевірки Youtrack вебхука
+YT_WEBHOOK_SECRET: str | None = os.getenv('YT_WEBHOOK_SECRET')
+
 # Дозволені Telegram user IDs (через кому)
 ALLOWED_TG_USER_IDS_RAW: str = os.getenv('ALLOWED_TG_USER_IDS', '').strip()
 ALLOWED_TG_USER_IDS: set[int] = {int(x) for x in ALLOWED_TG_USER_IDS_RAW.split(',') if x.strip().isdigit()}

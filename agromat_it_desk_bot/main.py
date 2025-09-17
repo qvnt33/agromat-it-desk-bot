@@ -19,6 +19,7 @@ from agromat_it_desk_bot.config import (
     YOUTRACK_STATE_IN_PROGRESS,
     YT_BASE_URL,
     YT_TOKEN,
+    YT_WEBHOOK_SECRET,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -43,6 +44,13 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:
     :raises HTTPException: 400, якщо пейлоад некоректний.
     """
     try:
+        # Перевірка секрету – відсікти «лівий» трафік
+        auth: str | None = request.headers.get('Authorization')
+        expected: str | None = f'Bearer {YT_WEBHOOK_SECRET}' if YT_WEBHOOK_SECRET else None
+        if not expected or auth != expected:
+            logger.warning('Невірний секрет YouTrack.')
+            raise HTTPException(status_code=403, detail='Forbidden')
+
         # Зчитати тіло запиту як JSON і переконатися, що вхідні дані є словником
         obj: Any = await request.json()
         if not isinstance(obj, dict):
