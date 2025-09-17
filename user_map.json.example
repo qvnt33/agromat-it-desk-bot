@@ -1,0 +1,5 @@
+{
+  "<telegram_id>": {"id": "<yt_id>", "login": "<yt_login>", "email": "<yt_email>"},
+  "<telegram_id>": {"login": "<yt_login>", "email": "<yt_email"},
+  "<telegram_id>": "<yt_login>"
+}
