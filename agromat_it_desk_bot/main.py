@@ -1,6 +1,7 @@
 import logging
 from html import escape
-from typing import Any, Mapping, Optional, cast
+from pathlib import Path
+from typing import Any, Mapping, cast
 
 import requests
 from fastapi import FastAPI, HTTPException, Request
@@ -63,7 +64,7 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:
         summary: str = _get_str(issue, 'summary')
         description: str = _get_str(issue, 'description')
 
-        url_val: Optional[str] = None
+        url_val: str | None = None
         url_field: object | None = issue.get('url')
 
         # Сформувати посилання на задачу, якщо його немає в початкових даних
@@ -75,7 +76,7 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:
         message: str = _format_message(id_readable, summary, description, url_val)
 
         # Зібрати клавіатуру з кнопкою «Прийняти», якщо відомий читабельний ID
-        reply_markup: Optional[dict[str, Any]] = None
+        reply_markup: dict[str, Any] | None = None
         if id_readable and id_readable != '(без ID)':
             reply_markup = {
                 'inline_keyboard': [
@@ -100,7 +101,7 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:
         raise HTTPException(status_code=400, detail='Invalid request') from None
 
 
-def _send_to_telegram(text: str, reply_markup: Optional[dict[str, Any]] = None) -> None:
+def _send_to_telegram(text: str, reply_markup: dict[str, Any] | None = None) -> None:
     """Надіслати повідомлення у Telegram.
 
     :param text: Текст повідомлення.
@@ -139,12 +140,12 @@ def _send_to_telegram(text: str, reply_markup: Optional[dict[str, Any]] = None) 
 async def telegram_webhook(request: Request) -> dict[str, bool]:  # noqa: C901
     """Обробити оновлення Telegram.
 
-    Прийняти ``callback_query`` для кнопки «Прийняти», перевірити дозволи й
+    Прийняти `callback_query` для кнопки «Прийняти», перевірити дозволи й
     виконати призначення у YouTrack з подальшою зміною статусу.
 
     :param request: Обʼєкт запиту FastAPI.
     :type request: Request
-    :returns: Ознака успішної обробки (завжди ``{"ok": true}``).
+    :returns: Ознака успішної обробки (завжди `{"ok": true}`).
     :rtype: dict[str, bool]
     """
     logger.info('Отримано вебхук Telegram')
@@ -168,20 +169,20 @@ async def telegram_webhook(request: Request) -> dict[str, bool]:  # noqa: C901
         return {'ok': True}
 
     cb_id_obj: object | None = cb_map.get('id')
-    cb_id: Optional[str] = str(cb_id_obj) if isinstance(cb_id_obj, (str, int)) else None
+    cb_id: str | None = str(cb_id_obj) if isinstance(cb_id_obj, (str, int)) else None
 
     from_user_map: Mapping[str, object] | dict[str, object] = _as_mapping(cb_map.get('from')) or {}
     tg_user_id_obj: object | None = from_user_map.get('id')
-    tg_user_id: Optional[int] = tg_user_id_obj if isinstance(tg_user_id_obj, int) else None
+    tg_user_id: int | None = tg_user_id_obj if isinstance(tg_user_id_obj, int) else None
 
     message_map: Mapping[str, object] | dict[str, object] = _as_mapping(cb_map.get('message')) or {}
     chat_map: Mapping[str, object] | dict[str, object] = _as_mapping(message_map.get('chat')) or {}
 
     chat_id_obj: object | None = chat_map.get('id')
-    chat_id: Optional[int] = chat_id_obj if isinstance(chat_id_obj, int) else None
+    chat_id: int | None = chat_id_obj if isinstance(chat_id_obj, int) else None
 
     msg_id_obj: object | None = message_map.get('message_id')
-    msg_id: Optional[int] = msg_id_obj if isinstance(msg_id_obj, int) else None
+    msg_id: int | None = msg_id_obj if isinstance(msg_id_obj, int) else None
 
     data_field: object | None = cb_map.get('data')
     payload: str = str(data_field) if isinstance(data_field, (str, int)) else ''
@@ -223,13 +224,13 @@ async def telegram_webhook(request: Request) -> dict[str, bool]:  # noqa: C901
         if not assignee_login and not assignee_email and not assignee_id:
             raise RuntimeError('Не знайдено мапінг користувача')
 
-        ok = _yt_assign_issue(issue_id_readable, assignee_login, assignee_email, assignee_id)
+        ok: bool = _yt_assign_issue(issue_id_readable, assignee_login, assignee_email, assignee_id)
         if ok:
             # Спробувати оновити стан задачі на конфігуроване значення
             try:
                 if YOUTRACK_STATE_IN_PROGRESS:
                     _yt_set_state(issue_id_readable, YOUTRACK_STATE_IN_PROGRESS)
-            except Exception as se:  # noqa: BLE001
+            except Exception as se:
                 logger.debug('Не вдалося оновити стан після прийняття: %s', se)
             _tg_api(
                 'answerCallbackQuery',
@@ -256,7 +257,7 @@ async def telegram_webhook(request: Request) -> dict[str, bool]:  # noqa: C901
                     'show_alert': True,
                 },
             )
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.exception('Не вдалося обробити прийняття: %s', e)
         _tg_api(
             'answerCallbackQuery',
@@ -272,7 +273,7 @@ async def telegram_webhook(request: Request) -> dict[str, bool]:  # noqa: C901
 
 @app.post('/telegram/webhook')
 async def telegram_webhook_alias(request: Request) -> dict[str, bool]:
-    """Проксувати запит на основний обробник ``/telegram``.
+    """Проксувати запит на основний обробник `/telegram`.
 
     :param request: Обʼєкт запиту FastAPI.
     :type request: Request
@@ -302,7 +303,7 @@ def _extract_issue_id(issue: Mapping[str, object]) -> str:
 
     :param issue: Дані задачі.
     :type issue: Mapping[str, object]
-    :returns: ``ID-123`` або ``(без ID)``.
+    :returns: `ID-123` або `(без ID)`.
     :rtype: str
     """
     id_readable: str = _get_str(issue, 'idReadable') or _get_str(issue, 'id')
@@ -311,7 +312,7 @@ def _extract_issue_id(issue: Mapping[str, object]) -> str:
 
     number: object | None = issue.get('numberInProject')
     project: object | None = issue.get('project')
-    project_short: Optional[str] = None
+    project_short: str | None = None
     if isinstance(project, dict):
         project_map: dict[str, object] = cast(dict[str, object], project)
         short_name: object | None = project_map.get('shortName')
@@ -328,11 +329,11 @@ def _extract_issue_id(issue: Mapping[str, object]) -> str:
     return '(без ID)'
 
 
-def _format_message(id_readable: str, summary_raw: str, description_raw: str, url: Optional[str]) -> str:
+def _format_message(id_readable: str, summary_raw: str, description_raw: str, url: str | None) -> str:
     """Сформувати текст повідомлення для Telegram.
 
     Екрануй HTML, додай посилання та обріжи опис до
-    ``DESCRIPTION_MAX_LEN``.
+    `DESCRIPTION_MAX_LEN`.
 
     :param id_readable: Читабельний ID задачі.
     :type id_readable: str
@@ -364,7 +365,7 @@ def _format_message(id_readable: str, summary_raw: str, description_raw: str, ur
 def _tg_api(method: str, payload: dict[str, Any]) -> None:
     """Звернутися до Telegram Bot API.
 
-    :param method: Метод Bot API (наприклад, ``sendMessage``).
+    :param method: Метод Bot API (наприклад, `sendMessage`).
     :type method: str
     :param payload: Тіло запиту.
     :type payload: dict[str, Any]
@@ -372,41 +373,42 @@ def _tg_api(method: str, payload: dict[str, Any]) -> None:
     """
     if not BOT_TOKEN:
         raise HTTPException(status_code=500, detail='Telegram token not configured')
-    url = f'https://api.telegram.org/bot{BOT_TOKEN}/{method}'
+    url: str = f'https://api.telegram.org/bot{BOT_TOKEN}/{method}'
     # Надіслати запит до Bot API з таймаутом, щоб уникати зависань
-    resp = requests.post(url, json=payload, timeout=10)
+    resp: requests.Response = requests.post(url, json=payload, timeout=10)
     if not resp.ok:
         logger.error('Помилка Telegram API (%s): %s', method, resp.text)
 
 
-def _resolve_youtrack_account(tg_user_id: Optional[int]) -> tuple[Optional[str], Optional[str], Optional[str]]:
+def _resolve_youtrack_account(tg_user_id: int | None) -> tuple[str | None, str | None, str | None]:
     """Знайти користувача YouTrack за Telegram ID.
 
-    Підтримати формат ``user_map.json``:
+    Підтримати формат `user_map.json`:
 
-    - ``"<tg_id>": "login"``
-    - ``"<tg_id>": {"login": "...", "email": "..."}``
-    - ``"<tg_id>": {"id": "<yt_user_id>", "login": "...", "email": "..."}``
+    - `"<tg_id>": "login"`
+    - `"<tg_id>": {"login": "...", "email": "..."}`
+    - `"<tg_id>": {"id": "<yt_user_id>", "login": "...", "email": "..."}`
 
     :param tg_user_id: Telegram ID користувача.
     :type tg_user_id: int | None
-    :returns: Кортеж ``(login, email, yt_user_id)``.
+    :returns: Кортеж `(login, email, yt_user_id)`.
     :rtype: tuple[str | None, str | None, str | None]
     """
-    login: Optional[str] = None
-    email: Optional[str] = None
-    yt_user_id: Optional[str] = None
+    login: str | None = None
+    email: str | None = None
+    yt_user_id: str | None = None
 
     # Прочитати дані зі вказаного файлу мапи користувачів
     try:
-        target_file = USER_MAP_FILE
-        # Якщо у змінній оточення вказали директорію (наприклад, '.') — шукаємо у ній user_map.json
+        target_file: Path | None = USER_MAP_FILE
+        # Якщо у змінній оточення вказано директорію (наприклад, '.') — пошук у ній user_map.json
         if target_file.is_dir():
-            candidate = target_file / 'user_map.json'
+            candidate: Path = target_file / 'user_map.json'
             if candidate.exists():
                 target_file = candidate
             else:
-                logger.error('USER_MAP_PATH вказує на директорію (%s), user_map.json не знайдено всередині', target_file)
+                logger.error('USER_MAP_PATH вказує на директорію (%s), user_map.json не знайдено всередині',
+                             target_file)
                 target_file = None  # Явно позначити, що читати нічого
 
         if target_file and target_file.exists():
@@ -416,7 +418,7 @@ def _resolve_youtrack_account(tg_user_id: Optional[int]) -> tuple[Optional[str],
                 dict[str, object], json.loads(target_file.read_text(encoding='utf-8')),
             )
             key = str(tg_user_id)
-            entry = mapping.get(key)
+            entry: object | None = mapping.get(key)
             if isinstance(entry, dict):
                 entry_map: dict[str, object] = cast(dict[str, object], entry)
                 login_val: object | None = entry_map.get('login')
@@ -430,7 +432,7 @@ def _resolve_youtrack_account(tg_user_id: Optional[int]) -> tuple[Optional[str],
                 login = entry
         else:
             logger.error('Файл мапи користувачів не знайдено за шляхом: %s', USER_MAP_FILE)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.exception('Не вдалося прочитати USER_MAP_FILE: %s', e)
 
     # Інші стратегії можна розширити: email|login будувати з профілю TG тощо
@@ -438,14 +440,14 @@ def _resolve_youtrack_account(tg_user_id: Optional[int]) -> tuple[Optional[str],
 
 
 def _yt_assign_issue(issue_id_readable: str,  # noqa: C901
-                     login: Optional[str],
-                     email: Optional[str],
-                     user_id: Optional[str]) -> bool:  # noqa: C901
-    """Призначити задачу в YouTrack на користувача через ``customFields``.
+                     login: str | None,
+                     email: str | None,
+                     user_id: str | None) -> bool:
+    """Призначити задачу в YouTrack на користувача через `customFields`.
 
     Отримати внутрішній ID користувача (із мапи або пошуку) і встановити поле «Виконавець».
 
-    :param issue_id_readable: Читабельний ID задачі (``ID-123``).
+    :param issue_id_readable: Читабельний ID задачі (`ID-123`).
     :type issue_id_readable: str
     :param login: Логін користувача YouTrack (опційно).
     :type login: str | None
@@ -453,19 +455,19 @@ def _yt_assign_issue(issue_id_readable: str,  # noqa: C901
     :type email: str | None
     :param user_id: Внутрішній ID користувача YouTrack (якщо відомо).
     :type user_id: str | None
-    :returns: ``True`` у разі успіху.
+    :returns: `True` у разі успіху.
     :rtype: bool
     """
     try:
         assert YT_BASE_URL and YT_TOKEN
-        headers = {
+        headers: dict[str, str] = {
             'Authorization': f'Bearer {YT_TOKEN}',
             'Accept': 'application/json',
             'Content-Type': 'application/json',
         }
 
         # Знайти внутрішній ID задачі, щоб працювати з REST API YouTrack
-        r = requests.get(
+        r: requests.Response = requests.get(
             f'{YT_BASE_URL}/api/issues',
             params={'query': issue_id_readable, 'fields': 'id,idReadable'},
             headers=headers,
@@ -474,37 +476,37 @@ def _yt_assign_issue(issue_id_readable: str,  # noqa: C901
         if not r.ok:
             logger.error('Помилка пошуку задачі в YouTrack: %s', r.text)
             return False
-        items = cast(list[dict[str, object]], r.json() or [])
-        issue: Optional[dict[str, object]] = next(
+        items: list[dict[str, object]] = cast(list[dict[str, object]], r.json() or [])
+        issue: dict[str, object] | None = next(
             (it for it in items if it.get('idReadable') == issue_id_readable),
             None,
         )
         if issue is None:
             logger.error('Задачу %s не знайдено у YouTrack', issue_id_readable)
             return False
-        issue_id_obj = issue.get('id')
-        issue_id: Optional[str] = issue_id_obj if isinstance(issue_id_obj, str) else None
+        issue_id_obj: object | None = issue.get('id')
+        issue_id: str | None = issue_id_obj if isinstance(issue_id_obj, str) else None
         if not issue_id:
             return False
 
         # Визначити внутрішній ID користувача YouTrack за логіном або email
-        yt_user_id: Optional[str] = user_id
+        yt_user_id: str | None = user_id
         if not yt_user_id and (login or email):
-            ur = requests.get(
+            ur: requests.Response = requests.get(
                 f'{YT_BASE_URL}/api/users',
                 params={'query': (login or email or ''), 'fields': 'id,login,email'},
                 headers=headers,
                 timeout=10,
             )
             if ur.ok:
-                users = cast(list[dict[str, object]], ur.json() or [])
+                users: list[dict[str, object]] = cast(list[dict[str, object]], ur.json() or [])
                 cand = None
                 if login:
-                    cand = next((u for u in users if u.get('login') == login), None)
+                    cand: dict[str, object] | None = next((u for u in users if u.get('login') == login), None)
                 if cand is None and email:
                     cand = next((u for u in users if u.get('email') == email), None)
                 if isinstance(cand, dict):
-                    id_obj = cand.get('id')
+                    id_obj: object | None = cand.get('id')
                     yt_user_id = id_obj if isinstance(id_obj, str) else None
         if not yt_user_id:
             logger.error('Не вдалося визначити ID користувача (login=%s, email=%s)', login, email)
@@ -512,7 +514,7 @@ def _yt_assign_issue(issue_id_readable: str,  # noqa: C901
 
         # Оновити поле «Виконавець» у задачі через REST для customFields
         try:
-            fr = requests.get(
+            fr: requests.Response = requests.get(
                 f'{YT_BASE_URL}/api/issues/{issue_id}',
                 params={
                     'fields': 'id,customFields(id,name,projectCustomField(id,field(id,name)),value(id,login,email))',
@@ -521,20 +523,20 @@ def _yt_assign_issue(issue_id_readable: str,  # noqa: C901
                 timeout=10,
             )
             if fr.ok:
-                issue_full = cast(dict[str, object], fr.json() or {})
-                cfs = cast(list[dict[str, object]], issue_full.get('customFields') or [])
-                assignee_cf_id: Optional[str] = None
-                desired_names = {
+                issue_full: dict[str, object] = cast(dict[str, object], fr.json() or {})
+                cfs: list[dict[str, object]] = cast(list[dict[str, object]], issue_full.get('customFields') or [])
+                assignee_cf_id: str | None = None
+                desired_names: set[str] = {
                     YOUTRACK_ASSIGNEE_FIELD_NAME.lower(),
                     'assignee',
                 }
                 # Знайти поле «Виконавець» серед кастомних полів задачі
                 for cf in cfs:
-                    pcf_map = _as_mapping(cf.get('projectCustomField')) or {}
-                    field_map = _as_mapping(pcf_map.get('field')) or {}
-                    field_name_obj = field_map.get('name')
+                    pcf_map: Mapping[str, object] | dict[str, object] = _as_mapping(cf.get('projectCustomField')) or {}
+                    field_map: Mapping[str, object] | dict[str, object] = _as_mapping(pcf_map.get('field')) or {}
+                    field_name_obj: object | None = field_map.get('name')
                     if isinstance(field_name_obj, str) and field_name_obj.lower() in desired_names:
-                        pcf_id_obj = pcf_map.get('id')
+                        pcf_id_obj: object | None = pcf_map.get('id')
                         if isinstance(pcf_id_obj, str):
                             assignee_cf_id = pcf_id_obj
                             break
@@ -545,7 +547,7 @@ def _yt_assign_issue(issue_id_readable: str,  # noqa: C901
                         value_payload['login'] = login
                     if email:
                         value_payload['email'] = email
-                    payload = {'value': value_payload}
+                    payload: dict[str, dict[str, object]] = {'value': value_payload}
                     ur = requests.post(
                         f'{YT_BASE_URL}/api/issues/{issue_id}/customFields/{assignee_cf_id}',
                         params={'fields': 'id'},
@@ -562,21 +564,21 @@ def _yt_assign_issue(issue_id_readable: str,  # noqa: C901
                     logger.debug('YouTrack customFields повернув помилку під час призначення: %s', ur.text)
             else:
                 logger.debug('Не вдалося отримати customFields задачі %s: %s', issue_id_readable, fr.text)
-        except Exception as ee:  # noqa: BLE001
+        except Exception as ee:
             logger.debug('Виняток під час призначення через customFields: %s', ee)
         logger.error('Не вдалося призначити виконавця через customFields')
         return False
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.exception('Виняток під час призначення виконавця: %s', e)
         return False
 
 
-def _as_mapping(obj: object | None) -> Optional[Mapping[str, object]]:
-    """Повернути ``Mapping``, якщо ``obj`` — ``dict``.
+def _as_mapping(obj: object | None) -> Mapping[str, object] | None:
+    """Повернути `Mapping`, якщо `obj` — `dict`.
 
     :param obj: Будь-який обʼєкт.
     :type obj: object | None
-    :returns: ``Mapping`` або ``None``.
+    :returns: `Mapping` або `None`.
     :rtype: Mapping[str, object] | None
     """
     if isinstance(obj, dict):
@@ -584,20 +586,20 @@ def _as_mapping(obj: object | None) -> Optional[Mapping[str, object]]:
     return None
 
 
-def _yt_find_issue(issue_id_readable: str) -> Optional[str]:
+def _yt_find_issue(issue_id_readable: str) -> str | None:
     """Знайти внутрішній ID задачі за читабельним ID.
 
-    :param issue_id_readable: Значення ``ID-123``.
+    :param issue_id_readable: Значення `ID-123`.
     :type issue_id_readable: str
-    :returns: Внутрішній ID ``"3-118"`` або ``None``.
+    :returns: Внутрішній ID `"3-118"` або `None`.
     :rtype: str | None
     """
     assert YT_BASE_URL and YT_TOKEN
-    headers = {
+    headers: dict[str, str] = {
         'Authorization': f'Bearer {YT_TOKEN}',
         'Accept': 'application/json',
     }
-    r = requests.get(
+    r: requests.Response = requests.get(
         f'{YT_BASE_URL}/api/issues',
         params={'query': issue_id_readable, 'fields': 'id,idReadable'},
         headers=headers,
@@ -607,38 +609,38 @@ def _yt_find_issue(issue_id_readable: str) -> Optional[str]:
         logger.debug('Не вдалося знайти задачу для оновлення стану: %s', r.text)
         return None
     # Перебрати результати пошуку та повернути внутрішній ID потрібної задачі
-    items = cast(list[dict[str, object]], r.json() or [])
-    issue = next((it for it in items if it.get('idReadable') == issue_id_readable), None)
+    items: list[dict[str, object]] = cast(list[dict[str, object]], r.json() or [])
+    issue: dict[str, object] | None = next((it for it in items if it.get('idReadable') == issue_id_readable), None)
     if not issue:
         return None
-    iid = issue.get('id')
+    iid: object | None = issue.get('id')
     return iid if isinstance(iid, str) else None
 
 
 def _yt_set_state(issue_id_readable: str, desired_state: str) -> bool:  # noqa: C901
-    """Встановити статус задачі через ``customFields``.
+    """Встановити статус задачі через `customFields`.
 
     :param issue_id_readable: Читабельний ID задачі.
     :type issue_id_readable: str
     :param desired_state: Назва стану в бандлі (наприклад, «В роботі»).
     :type desired_state: str
-    :returns: ``True`` у разі успіху.
+    :returns: `True` у разі успіху.
     :rtype: bool
     """
     try:
         assert YT_BASE_URL and YT_TOKEN
-        issue_id = _yt_find_issue(issue_id_readable)
+        issue_id: str | None = _yt_find_issue(issue_id_readable)
         if not issue_id:
             logger.error('Не знайдено задачу %s під час оновлення стану', issue_id_readable)
             return False
-        headers = {
+        headers: dict[str, str] = {
             'Authorization': f'Bearer {YT_TOKEN}',
             'Accept': 'application/json',
             'Content-Type': 'application/json',
         }
 
         # Отримати перелік кастомних полів задачі та знайти поле стану
-        fr = requests.get(
+        fr: requests.Response = requests.get(
             f'{YT_BASE_URL}/api/issues/{issue_id}',
             params={
                 'fields': 'customFields(id,name,projectCustomField(id,field(id,name),bundle(values(id,name))))',
@@ -647,34 +649,36 @@ def _yt_set_state(issue_id_readable: str, desired_state: str) -> bool:  # noqa: 
             timeout=10,
         )
         if not fr.ok:
-            logger.warning('Не вдалося отримати customFields задачі %s для оновлення стану: %s', issue_id_readable, fr.text)
+            logger.warning('Не вдалося отримати customFields задачі %s для оновлення стану: %s',
+                           issue_id_readable,
+                           fr.text)
             return False
-        issue_full = cast(dict[str, object], fr.json() or {})
-        cfs = cast(list[dict[str, object]], issue_full.get('customFields') or [])
-        desired_names = {YOUTRACK_STATE_FIELD_NAME.lower(), 'state'}
-        pcf_id: Optional[str] = None
-        value_id: Optional[str] = None
+        issue_full: dict[str, object] = cast(dict[str, object], fr.json() or {})
+        cfs: list[dict[str, object]] = cast(list[dict[str, object]], issue_full.get('customFields') or [])
+        desired_names: set[str] = {YOUTRACK_STATE_FIELD_NAME.lower(), 'state'}
+        pcf_id: str | None = None
+        value_id: str | None = None
         for cf in cfs:
-            pcf_map = _as_mapping(cf.get('projectCustomField')) or {}
-            field_map = _as_mapping(pcf_map.get('field')) or {}
-            field_name_obj = field_map.get('name')
+            pcf_map: Mapping[str, object] | dict[str, object] = _as_mapping(cf.get('projectCustomField')) or {}
+            field_map: Mapping[str, object] | dict[str, object] = _as_mapping(pcf_map.get('field')) or {}
+            field_name_obj: object | None = field_map.get('name')
             if isinstance(field_name_obj, str) and field_name_obj.lower() in desired_names:
-                pcf_id_obj = pcf_map.get('id')
+                pcf_id_obj: object | None = pcf_map.get('id')
                 if isinstance(pcf_id_obj, str):
                     pcf_id = pcf_id_obj
-                    bundle_map = _as_mapping(pcf_map.get('bundle')) or {}
-                    values = cast(list[dict[str, object]], bundle_map.get('values') or [])
+                    bundle_map: Mapping[str, object] | dict[str, object] = _as_mapping(pcf_map.get('bundle')) or {}
+                    values: list[dict[str, object]] = cast(list[dict[str, object]], bundle_map.get('values') or [])
                     for v in values:
-                        name = v.get('name')
+                        name: object | None = v.get('name')
                         if isinstance(name, str) and name == desired_state:
-                            vid = v.get('id')
+                            vid: object | None = v.get('id')
                             if isinstance(vid, str):
                                 value_id = vid
                                 break
                 break
         if pcf_id and value_id:
             # Записати вибране значення у поле стану задачі
-            ur = requests.post(
+            ur: requests.Response = requests.post(
                 f'{YT_BASE_URL}/api/issues/{issue_id}/customFields/{pcf_id}',
                 params={'fields': 'id'},
                 json={'value': {'id': value_id}},
@@ -692,6 +696,6 @@ def _yt_set_state(issue_id_readable: str, desired_state: str) -> bool:  # noqa: 
 
         # Без командного API — лише customFields, щоб уникнути затримок
         return False
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.debug('Виняток під час оновлення стану: %s', e)
         return False
