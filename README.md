@@ -87,6 +87,8 @@
 - `login` / `email` — використовуються для пошуку користувача, якщо `id` не задано.
 - Строкове значення (`"support.engineer"`) інтерпретується як логін.
 
+Користувачі можуть додавати себе в мапу напряму з Telegram, надіславши `/register <логін>`. Бот автоматично знайде відповідний обліковий запис у YouTrack і збереже `login`, `email` та `id` у `user_map.json`.
+
 ### YouTrack workflow
 Файл `webhooks/yt2tg_webhook.js` можна використати як кастомний **workflow**:
 1. Administration → Workflows → **Add workflow**.
@@ -159,7 +161,7 @@
 | --- | --- |
 | `/telegram` повертає 403 | Перевірити `TELEGRAM_WEBHOOK_SECRET` у `.env` та при `setWebhook`. |
 | Натискання «Прийняти» нічого не дає | Переконатися, що вебхук **Telegram** вказує на `/telegram` і сервіс працює. |
-| «Не вдалося визначити ID користувача» | Додати відповідний запис у `user_map.json` (логін/ID/email). |
+| «Не вдалося визначити ID користувача» | Надіслати `/register <логін>` у бот або вручну додати запис у `user_map.json`. |
 | «Не знайдено читабельного ID» | Перевірити workflow: має передавати `idReadable` або `project.shortName` + `numberInProject`. |
 | Статус не змінюється | Звірити `YOUTRACK_STATE_FIELD_NAME` і `YOUTRACK_STATE_IN_PROGRESS` з бандлом поля в **YouTrack**. |
 

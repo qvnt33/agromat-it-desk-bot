@@ -28,10 +28,19 @@ from agromat_it_desk_bot.callback_handlers import (
 )
 from agromat_it_desk_bot.config import (
     YT_BASE_URL,
+    YT_TOKEN,
     YT_WEBHOOK_SECRET,
 )
-from agromat_it_desk_bot.telegram_service import send_message
-from agromat_it_desk_bot.utils import configure_logging, extract_issue_id, format_message, get_str
+from agromat_it_desk_bot.telegram_service import call_api, send_message
+from agromat_it_desk_bot.utils import (
+    as_mapping,
+    configure_logging,
+    extract_issue_id,
+    format_message,
+    get_str,
+    upsert_user_map_entry,
+)
+from agromat_it_desk_bot.youtrack_service import lookup_user_by_login
 
 configure_logging()
 logger: logging.Logger = logging.getLogger(__name__)
@@ -119,10 +128,16 @@ async def telegram_webhook(request: Request) -> dict[str, bool]:
 
     verify_telegram_secret(request)
 
-    # Telegram надсилає JSON з callback-структурою
+    # Telegram надсилає JSON із даними оновлення
     payload: Any = await request.json()
     if not isinstance(payload, dict):
         logger.warning('Отримано некоректний payload від Telegram: %r', payload)
+        return {'ok': True}
+
+    message_mapping: Mapping[str, object] | None = as_mapping(payload.get('message'))
+    if message_mapping is not None:
+        logger.debug('Отримано текстове повідомлення від Telegram')
+        _handle_message_update(message_mapping)
         return {'ok': True}
 
     # Спробувати побудувати структурований контекст callback
@@ -155,6 +170,128 @@ async def telegram_webhook(request: Request) -> dict[str, bool]:
 async def telegram_webhook_alias(request: Request) -> dict[str, bool]:
     """Проксувати запит на основний обробник ``/telegram`` (запасний маршрут)."""
     return await telegram_webhook(request)
+
+
+def _handle_message_update(message: Mapping[str, object]) -> None:
+    """Обробити звичайне повідомлення Telegram (команди користувачів)."""
+    chat_mapping: Mapping[str, object] | None = as_mapping(message.get('chat'))
+    chat_id_obj: object | None = chat_mapping.get('id') if chat_mapping else None
+    chat_id: int | None = chat_id_obj if isinstance(chat_id_obj, int) else None
+    chat_type: str | None = None
+    if chat_mapping is not None:
+        chat_type_obj: object | None = chat_mapping.get('type')
+        chat_type = chat_type_obj if isinstance(chat_type_obj, str) else None
+
+    if chat_id is None:
+        logger.debug('Не вдалося визначити chat_id для повідомлення: %s', message)
+        return
+
+    if chat_type and chat_type != 'private':
+        logger.debug('Команда /register проігнорована у чаті типу %s (chat_id=%s)', chat_type, chat_id)
+        return
+
+    text_obj: object | None = message.get('text')
+    text: str | None = text_obj if isinstance(text_obj, str) else None
+    if not text:
+        return
+
+    normalized_text: str = text.strip()
+    if normalized_text.startswith('/register'):
+        _handle_register_command(chat_id, message, normalized_text)
+    elif normalized_text in {'/start', '/help'}:
+        _reply_text(
+            chat_id,
+            'Щоб додати себе до списку дозволених, надішліть команду\n'
+            '/register <логін>. Бот підставить решту даних автоматично.',
+        )
+
+
+def _handle_register_command(chat_id: int, message: Mapping[str, object], text: str) -> None:
+    """Обробити команду ``/register`` та зберегти дані користувача."""
+    parts: list[str] = text.split()
+    if len(parts) < 2:
+        _reply_text(chat_id, 'Формат команди: /register <логін>')
+        return
+
+    _, *args = parts
+    login_candidate: str | None = args[0] if args else None
+    if not login_candidate:
+        _reply_text(chat_id, 'Формат команди: /register <логін>')
+        return
+
+    login: str = login_candidate.strip()
+    if not login:
+        _reply_text(chat_id, 'Формат команди: /register <логін>')
+        return
+
+    from_mapping: Mapping[str, object] | None = as_mapping(message.get('from'))
+    tg_user_obj: object | None = from_mapping.get('id') if from_mapping else None
+    tg_user_id: int | None = tg_user_obj if isinstance(tg_user_obj, int) else None
+    if tg_user_id is None:
+        logger.warning('Не вдалося визначити відправника для команди /register: %s', message)
+        _reply_text(chat_id, 'Не вдалося визначити ваш Telegram ID. Спробуйте пізніше.')
+        return
+
+    if not (YT_BASE_URL and YT_TOKEN):
+        logger.error('Команда /register недоступна: не налаштовано YT_BASE_URL або YT_TOKEN')
+        _reply_text(chat_id, 'YouTrack інтеграція не налаштована. Зверніться до адміністратора.')
+        return
+
+    try:
+        resolved_login, email, yt_user_id = lookup_user_by_login(login)
+    except AssertionError:  # виникає, якщо YT_TOKEN відсутній
+        logger.exception('Не налаштовано токен YouTrack для пошуку користувача')
+        _reply_text(chat_id, 'YouTrack токен не налаштовано. Зверніться до адміністратора.')
+        return
+    except Exception as err:  # noqa: BLE001
+        logger.exception('Помилка пошуку користувача YouTrack за логіном %s: %s', login, err)
+        _reply_text(chat_id, 'Не вдалося отримати дані з YouTrack. Спробуйте пізніше.')
+        return
+
+    if yt_user_id is None:
+        _reply_text(chat_id, 'Користувача з таким логіном у YouTrack не знайдено.')
+        return
+
+    stored_login: str = resolved_login or login
+
+    try:
+        upsert_user_map_entry(
+            tg_user_id,
+            login=stored_login,
+            email=email,
+            yt_user_id=yt_user_id,
+        )
+    except ValueError as err:
+        _reply_text(chat_id, f'Не вдалося зберегти дані: {err}')
+        return
+    except FileNotFoundError as err:
+        logger.exception('Не вдалося створити user_map.json: %s', err)
+        _reply_text(chat_id, 'Сталася помилка при збереженні даних. Адміністратори вже в курсі.')
+        return
+    except Exception as err:  # noqa: BLE001
+        logger.exception('Помилка при оновленні user_map для %s: %s', tg_user_id, err)
+        _reply_text(chat_id, 'Сталася непередбачувана помилка. Спробуйте пізніше.')
+        return
+
+    logger.info('Користувач %s зареєструвався: login=%s email=%s yt_id=%s', tg_user_id, stored_login, email, yt_user_id)
+
+    message_suffix: str = f' Логін у YouTrack: {stored_login}.' if stored_login else ''
+    _reply_text(
+        chat_id,
+        f'✅ Дані збережено. Тепер ви можете натискати кнопку «Прийняти».{message_suffix}',
+    )
+
+
+def _reply_text(chat_id: int, text: str) -> None:
+    """Надіслати просте текстове повідомлення у чат."""
+    call_api(
+        'sendMessage',
+        {
+            'chat_id': chat_id,
+            'text': text,
+            'disable_web_page_preview': True,
+        },
+    )
 
 
 def main() -> None:

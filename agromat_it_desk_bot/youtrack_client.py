@@ -27,6 +27,14 @@ class CustomField(TypedDict, total=False):
 CustomFieldMap = dict[str, CustomField]
 
 
+class YouTrackUser(TypedDict, total=False):
+    """Перелік корисних полів користувача YouTrack."""
+
+    id: str
+    login: str
+    email: str
+
+
 def get_issue_internal_id(issue_id_readable: str) -> str | None:
     """Повернути внутрішній ID задачі за ``idReadable``.
 
@@ -121,39 +129,83 @@ def assign_custom_field(issue_internal_id: str, field_id: str, payload: dict[str
     return True
 
 
-def find_user_id(login: str | None, email: str | None) -> str | None:
-    """Визначити ID користувача за логіном або email.
+def find_user(login: str | None, email: str | None) -> YouTrackUser | None:
+    """Повернути опис користувача YouTrack за логіном."""
 
-    :param login: Логін користувача у YouTrack.
-    :type login: str | None
-    :param email: Email користувача у YouTrack.
-    :type email: str | None
-    :returns: Внутрішній ID користувача або ``None``.
-    :rtype: str | None
-    """
-    if not (login or email):
+    if not login:
+        logger.warning('find_user викликано без логіна (email=%s)', email)
         return None
+
+    users: list[dict[str, object]] | None = _search_users(login)
+    if not users:
+        logger.warning('Користувача login=%s не знайдено у YouTrack', login)
+        return None
+
+    candidate: Mapping[str, object] | None = None
+    for user in users:
+        login_candidate: object | None = user.get('login')
+        if isinstance(login_candidate, str) and login_candidate == login:
+            candidate = user
+            break
+
+    if candidate is None:
+        logger.warning('Серед результатів запиту login=%s немає точного збігу', login)
+        return None
+
+    mapped: YouTrackUser | None = _map_user(candidate)
+    if mapped:
+        return mapped
+
+    logger.warning('Не вдалося спроєктувати користувача YouTrack login=%s', login)
+    return None
+
+
+def find_user_id(login: str | None, email: str | None) -> str | None:
+    """Визначити ID користувача за логіном або email."""
+
+    user: YouTrackUser | None = find_user(login, email)
+    if user is None:
+        return None
+
+    user_id: str | None = user.get('id')
+    return user_id if isinstance(user_id, str) else None
+
+
+def _search_users(query: str) -> list[dict[str, object]] | None:
+    """Виконати пошук користувачів у YouTrack за довільним запитом."""
 
     headers: dict[str, str] = _base_headers()
     response: requests.Response = requests.get(
         f'{YT_BASE_URL}/api/users',
-        params={'query': login or email or '', 'fields': 'id,login,email'},
+        params={'query': query, 'fields': 'id,login,email'},
         headers=headers,
         timeout=10,
     )
     if not response.ok:
-        logger.error('Помилка пошуку користувача %s у YouTrack: %s', login or email, response.text)
+        logger.error('Помилка пошуку користувача %s у YouTrack: %s', query, response.text)
         return None
 
-    users: list[dict[str, object]] = cast(list[dict[str, object]], response.json() or [])
-    candidate = None
-    if login:
-        candidate: dict[str, object] | None = next((user for user in users if user.get('login') == login), None)
-    if candidate is None and email:
-        candidate = next((user for user in users if user.get('email') == email), None)
+    return cast(list[dict[str, object]], response.json() or [])
 
-    user_id: object | None = candidate.get('id') if isinstance(candidate, dict) else None
-    return user_id if isinstance(user_id, str) else None
+
+def _map_user(candidate: Mapping[str, object]) -> YouTrackUser | None:
+    """Привести запис користувача до ``YouTrackUser``."""
+
+    result: YouTrackUser = {}
+
+    id_val: object | None = candidate.get('id')
+    if isinstance(id_val, str):
+        result['id'] = id_val
+
+    login_val: object | None = candidate.get('login')
+    if isinstance(login_val, str):
+        result['login'] = login_val
+
+    email_val: object | None = candidate.get('email')
+    if isinstance(email_val, str):
+        result['email'] = email_val
+
+    return result or None
 
 
 def find_state_value_id(field_data: CustomField, desired_state: str) -> str | None:

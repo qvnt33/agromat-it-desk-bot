@@ -160,18 +160,25 @@ def _resolve_map_path() -> Path | None:
     target_file: Path = USER_MAP_FILE
     if target_file.is_dir():
         candidate: Path = target_file / 'user_map.json'
-        if candidate.exists():
-            logger.debug('USER_MAP_FILE визначено як директорія, використовую %s', candidate)
-            return candidate
-        logger.error('USER_MAP_PATH вказує на директорію (%s), user_map.json не знайдено', target_file)
-        return None
+        logger.debug('USER_MAP_FILE визначено як директорія, використовую %s', candidate)
+        return candidate
     logger.debug('USER_MAP_FILE використовується напряму: %s', target_file)
     return target_file
 
 
 def _load_mapping(path: Path) -> UserMap:
     """Завантажити JSON-дані з файлу мапи користувачів."""
-    raw_data: object = json.loads(path.read_text(encoding='utf-8'))
+    raw_text: str = path.read_text(encoding='utf-8')
+    if not raw_text.strip():
+        logger.warning('USER_MAP_FILE %s порожній, використовую порожню мапу', path)
+        return {}
+
+    try:
+        raw_data: object = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        logger.error('USER_MAP_FILE %s має некоректний JSON: %s', path, exc)
+        return {}
+
     if not isinstance(raw_data, dict):
         logger.error('USER_MAP_FILE має некоректний формат (очікувався dict)')
         return {}
@@ -203,3 +210,54 @@ def _load_mapping(path: Path) -> UserMap:
 
     logger.debug('Завантажено %s запис(ів) user_map', len(result))
     return result
+
+
+def upsert_user_map_entry(
+    tg_user_id: int,
+    *,
+    login: str | None = None,
+    email: str | None = None,
+    yt_user_id: str | None = None,
+) -> None:
+    """Додати або оновити запис користувача у ``user_map.json``."""
+
+    if not any((login, email, yt_user_id)):
+        msg = 'Потрібно надати принаймні одне з полів: login, email або yt_user_id'
+        logger.error('Не вдалося оновити мапу користувачів: %s', msg)
+        raise ValueError(msg)
+
+    path: Path | None = _resolve_map_path()
+    if path is None:
+        raise FileNotFoundError('Не вдалося визначити шлях до user_map.json')
+
+    mapping: UserMap = {}
+    if path.exists():
+        mapping = _load_mapping(path)
+
+    entry: UserMapEntry = {}
+    if login:
+        entry['login'] = login
+    if email:
+        entry['email'] = email
+    if yt_user_id:
+        entry['id'] = yt_user_id
+
+    if not entry:
+        msg = 'Надано порожні дані для оновлення мапи користувачів'
+        logger.error(msg)
+        raise ValueError(msg)
+
+    mapping[str(tg_user_id)] = entry
+    _write_mapping(path, mapping)
+    logger.info('Оновлено user_map для користувача %s', tg_user_id)
+
+
+def _write_mapping(path: Path, mapping: UserMap) -> None:
+    """Зберегти ``user_map.json`` на диск."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(mapping, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding='utf-8',
+    )
+    logger.debug('Збережено user_map (%s записів) у %s', len(mapping), path)

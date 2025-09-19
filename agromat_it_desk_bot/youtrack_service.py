@@ -12,6 +12,7 @@ from agromat_it_desk_bot.youtrack_client import (
     CustomFieldMap,
     assign_custom_field,
     fetch_issue_custom_fields,
+    find_user,
     find_state_value_id,
     find_user_id,
     get_issue_internal_id,
@@ -163,3 +164,24 @@ def _pick_field(fields: CustomFieldMap, names: set[str]) -> CustomField | None:
         if field is not None:
             return field
     return None
+
+
+def lookup_user_by_login(login: str) -> tuple[str | None, str | None, str | None]:
+    """Повернути (логін, email, id) користувача YouTrack за логіном."""
+
+    if not login:
+        return None, None, None
+
+    user = find_user(login, None)
+    if user is None:
+        return None, None, None
+
+    login_value = user.get('login')
+    resolved_login: str | None = login_value if isinstance(login_value, str) else login
+
+    email_value = user.get('email')
+    email: str | None = email_value if isinstance(email_value, str) else None
+
+    user_id_value = user.get('id')
+    yt_user_id: str | None = user_id_value if isinstance(user_id_value, str) else None
+    return resolved_login, email, yt_user_id

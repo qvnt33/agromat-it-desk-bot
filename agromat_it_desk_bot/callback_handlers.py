@@ -97,9 +97,18 @@ def is_user_allowed(tg_user_id: int | None) -> bool:
     :returns: ``True`` якщо користувач дозволений або whitelist порожній.
     :rtype: bool
     """
+    if tg_user_id is None:
+        return False
+
     if not ALLOWED_TG_USER_IDS:
+        login, email, yt_user_id = resolve_account(tg_user_id)
+        return any((login, email, yt_user_id))
+
+    if tg_user_id in ALLOWED_TG_USER_IDS:
         return True
-    return tg_user_id is not None and tg_user_id in ALLOWED_TG_USER_IDS
+
+    login, email, yt_user_id = resolve_account(tg_user_id)
+    return any((login, email, yt_user_id))
 
 
 def parse_action(payload: str) -> tuple[str, str | None]:
