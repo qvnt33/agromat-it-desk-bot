@@ -234,6 +234,8 @@ def upsert_user_map_entry(
     if path.exists():
         mapping = _load_mapping(path)
 
+    _ensure_unique_mapping(mapping, tg_user_id, login=login, yt_user_id=yt_user_id)
+
     entry: UserMapEntry = {}
     if login:
         entry['login'] = login
@@ -261,3 +263,73 @@ def _write_mapping(path: Path, mapping: UserMap) -> None:
         encoding='utf-8',
     )
     logger.debug('Збережено user_map (%s записів) у %s', len(mapping), path)
+
+
+def is_login_taken(login: str, *, exclude_tg_user_id: int | None = None) -> bool:
+    """Перевірити, чи закріплений логін за іншим Telegram користувачем."""
+
+    path: Path | None = _resolve_map_path()
+    if path is None or not login:
+        return False
+
+    if not path.exists():
+        return False
+
+    mapping: UserMap = _load_mapping(path)
+    login_normalized: str = login.lower()
+    exclude_key: str | None = str(exclude_tg_user_id) if exclude_tg_user_id is not None else None
+
+    for key, raw_entry in mapping.items():
+        if exclude_key is not None and key == exclude_key:
+            continue
+
+        existing_login: str | None = None
+        if isinstance(raw_entry, dict):
+            login_val: object | None = raw_entry.get('login')
+            if isinstance(login_val, str):
+                existing_login = login_val
+        elif isinstance(raw_entry, str):
+            existing_login = raw_entry
+
+        if existing_login and existing_login.lower() == login_normalized:
+            return True
+
+    return False
+
+
+def _ensure_unique_mapping(
+    mapping: UserMap,
+    tg_user_id: int,
+    *,
+    login: str | None,
+    yt_user_id: str | None,
+) -> None:
+    """Переконатися, що логін та YouTrack ID не зайняті іншими користувачами."""
+
+    target_key: str = str(tg_user_id)
+    login_normalized: str | None = login.lower() if isinstance(login, str) else None
+
+    for existing_key, raw_entry in mapping.items():
+        if existing_key == target_key:
+            continue
+
+        existing_login: str | None = None
+        existing_yt_id: str | None = None
+
+        if isinstance(raw_entry, dict):
+            login_val: object | None = raw_entry.get('login')
+            if isinstance(login_val, str):
+                existing_login = login_val
+            yt_val: object | None = raw_entry.get('id')
+            if isinstance(yt_val, str):
+                existing_yt_id = yt_val
+        elif isinstance(raw_entry, str):
+            existing_login = raw_entry
+
+        if login_normalized and existing_login and existing_login.lower() == login_normalized:
+            logger.warning('Логін %s вже закріплено за користувачем %s', login, existing_key)
+            raise ValueError('Цей логін вже закріплено за іншим користувачем.')
+
+        if yt_user_id and existing_yt_id and existing_yt_id == yt_user_id:
+            logger.warning('YouTrack ID %s вже закріплено за користувачем %s', yt_user_id, existing_key)
+            raise ValueError('Цей YouTrack акаунт вже привʼязаний до іншого користувача.')
