@@ -131,7 +131,6 @@ def assign_custom_field(issue_internal_id: str, field_id: str, payload: dict[str
 
 def find_user(login: str | None, email: str | None) -> YouTrackUser | None:
     """Повернути опис користувача YouTrack за логіном."""
-
     if not login:
         logger.warning('find_user викликано без логіна (email=%s)', email)
         return None
@@ -162,7 +161,6 @@ def find_user(login: str | None, email: str | None) -> YouTrackUser | None:
 
 def find_user_id(login: str | None, email: str | None) -> str | None:
     """Визначити ID користувача за логіном або email."""
-
     user: YouTrackUser | None = find_user(login, email)
     if user is None:
         return None
@@ -173,7 +171,6 @@ def find_user_id(login: str | None, email: str | None) -> str | None:
 
 def _search_users(query: str) -> list[dict[str, object]] | None:
     """Виконати пошук користувачів у YouTrack за довільним запитом."""
-
     headers: dict[str, str] = _base_headers()
     response: requests.Response = requests.get(
         f'{YT_BASE_URL}/api/users',
@@ -190,7 +187,6 @@ def _search_users(query: str) -> list[dict[str, object]] | None:
 
 def _map_user(candidate: Mapping[str, object]) -> YouTrackUser | None:
     """Привести запис користувача до ``YouTrackUser``."""
-
     result: YouTrackUser = {}
 
     id_val: object | None = candidate.get('id')

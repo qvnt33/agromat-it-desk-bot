@@ -49,6 +49,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
+
 class PendingLoginChange(NamedTuple):
     """Запис для відкладеного оновлення логіна."""
 
@@ -58,7 +59,7 @@ class PendingLoginChange(NamedTuple):
     yt_user_id: str
 
 
-_pending_login_updates: dict[int, PendingLoginChange] = {}
+pending_login_updates: dict[int, PendingLoginChange] = {}
 
 
 @app.post('/youtrack')
@@ -210,9 +211,9 @@ def _handle_message_update(message: Mapping[str, object]) -> None:
 
     normalized_text: str = text.strip()
     if normalized_text.startswith('/register'):
-        _handle_register_command(chat_id, message, normalized_text)
+        handle_register_command(chat_id, message, normalized_text)
     elif normalized_text.startswith('/confirm_login'):
-        _handle_confirm_login_command(chat_id, message, normalized_text)
+        handle_confirm_login_command(chat_id, message, normalized_text)
     elif normalized_text in {'/start', '/help'}:
         _reply_text(
             chat_id,
@@ -221,7 +222,7 @@ def _handle_message_update(message: Mapping[str, object]) -> None:
         )
 
 
-def _handle_register_command(chat_id: int, message: Mapping[str, object], text: str) -> None:
+def handle_register_command(chat_id: int, message: Mapping[str, object], text: str) -> None:
     """Обробити команду ``/register`` та зберегти дані користувача."""
     parts: list[str] = text.split()
     if len(parts) < 2:
@@ -249,23 +250,23 @@ def _handle_register_command(chat_id: int, message: Mapping[str, object], text: 
 
     current_login, _, _ = resolve_from_map(tg_user_id)
     if current_login and current_login.lower() == login.lower():
-        _pending_login_updates.pop(tg_user_id, None)
+        pending_login_updates.pop(tg_user_id, None)
         _reply_text(chat_id, f'Ви вже зареєстровані з логіном {current_login}.')
         return
 
     details: PendingLoginChange | None = _resolve_login_details(chat_id, login)
     if details is None:
-        _pending_login_updates.pop(tg_user_id, None)
+        pending_login_updates.pop(tg_user_id, None)
         return
 
     exclude_key: int | None = tg_user_id if current_login is not None else None
     if is_login_taken(details.resolved_login, exclude_tg_user_id=exclude_key):
-        _pending_login_updates.pop(tg_user_id, None)
+        pending_login_updates.pop(tg_user_id, None)
         _reply_text(chat_id, 'Цей логін вже закріплено за іншим користувачем.')
         return
 
     if current_login and current_login.lower() != details.resolved_login.lower():
-        _pending_login_updates[tg_user_id] = details
+        pending_login_updates[tg_user_id] = details
         _reply_text(
             chat_id,
             'Ваш поточний логін: '
@@ -274,13 +275,12 @@ def _handle_register_command(chat_id: int, message: Mapping[str, object], text: 
         )
         return
 
-    _pending_login_updates.pop(tg_user_id, None)
+    pending_login_updates.pop(tg_user_id, None)
     _complete_registration(chat_id, tg_user_id, details)
 
 
-def _handle_confirm_login_command(chat_id: int, message: Mapping[str, object], text: str) -> None:
+def handle_confirm_login_command(chat_id: int, message: Mapping[str, object], text: str) -> None:
     """Підтвердити зміну логіна на новий."""
-
     parts: list[str] = text.split()
     if len(parts) < 2:
         _reply_text(chat_id, 'Формат команди: /confirm_login <логін>')
@@ -305,7 +305,7 @@ def _handle_confirm_login_command(chat_id: int, message: Mapping[str, object], t
         _reply_text(chat_id, 'Не вдалося визначити ваш Telegram ID. Спробуйте пізніше.')
         return
 
-    pending_details: PendingLoginChange | None = _pending_login_updates.get(tg_user_id)
+    pending_details: PendingLoginChange | None = pending_login_updates.get(tg_user_id)
     if pending_details is None:
         _reply_text(chat_id, 'Немає запиту на зміну логіна. Спочатку використайте /register <логін>.')
         return
@@ -316,12 +316,12 @@ def _handle_confirm_login_command(chat_id: int, message: Mapping[str, object], t
 
     current_login, _, _ = resolve_from_map(tg_user_id)
     if current_login and current_login.lower() == pending_details.resolved_login.lower():
-        _pending_login_updates.pop(tg_user_id, None)
+        pending_login_updates.pop(tg_user_id, None)
         _reply_text(chat_id, f'Ви вже зареєстровані з логіном {current_login}.')
         return
 
     if is_login_taken(pending_details.resolved_login, exclude_tg_user_id=tg_user_id):
-        _pending_login_updates.pop(tg_user_id, None)
+        pending_login_updates.pop(tg_user_id, None)
         _reply_text(chat_id, 'Цей логін вже закріплено за іншим користувачем.')
         return
 
@@ -336,7 +336,6 @@ def _complete_registration(
     previous_login: str | None = None,
 ) -> bool:
     """Завершити реєстрацію користувача з підготовленими даними."""
-
     try:
         upsert_user_map_entry(
             tg_user_id,
@@ -357,7 +356,7 @@ def _complete_registration(
         _reply_text(chat_id, 'Сталася непередбачувана помилка. Спробуйте пізніше.')
         return False
 
-    _pending_login_updates.pop(tg_user_id, None)
+    pending_login_updates.pop(tg_user_id, None)
     logger.info(
         'Користувач %s зареєструвався: login=%s email=%s yt_id=%s',
         tg_user_id,
@@ -384,7 +383,6 @@ def _complete_registration(
 
 def _resolve_login_details(chat_id: int, login: str) -> PendingLoginChange | None:
     """Отримати деталі облікового запису YouTrack для заданого логіна."""
-
     if not (YT_BASE_URL and YT_TOKEN):
         logger.error('Команда /register недоступна: не налаштовано YT_BASE_URL або YT_TOKEN')
         _reply_text(chat_id, 'YouTrack інтеграція не налаштована. Зверніться до адміністратора.')

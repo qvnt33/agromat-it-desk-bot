@@ -8,7 +8,7 @@ import logging.config
 from collections.abc import Mapping
 from html import escape
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, TypedDict, cast
 
 from agromat_it_desk_bot.config import DESCRIPTION_MAX_LEN, USER_MAP_FILE
 
@@ -184,32 +184,53 @@ def _load_mapping(path: Path) -> UserMap:
         return {}
 
     result: UserMap = {}
-    for key, value in raw_data.items():  # type: ignore
-        if not isinstance(key, str):
-            logger.debug('Пропускаю запис user_map із некоректним ключем: %r', key)
+    typed_data: dict[object, object] = cast(dict[object, object], raw_data)
+
+    for key_obj, value in typed_data.items():
+        if not isinstance(key_obj, str):
+            logger.debug('Пропускаю запис user_map із некоректним ключем: %r', key_obj)
             continue
 
-        if isinstance(value, dict):
-            entry: UserMapEntry = {}
-            login_val: object | None = value.get('login')
-            email_val: object | None = value.get('email')
-            id_val: object | None = value.get('id')
-
-            if isinstance(login_val, str):
-                entry['login'] = login_val
-            if isinstance(email_val, str):
-                entry['email'] = email_val
-            if isinstance(id_val, str):
-                entry['id'] = id_val
-
-            result[key] = entry
-        elif isinstance(value, str):
-            result[key] = value
-        else:
-            logger.debug('Пропускаю запис user_map %s через некоректний формат: %r', key, value)
+        key: str = key_obj
+        normalized: UserMapEntry | str | None = _normalize_user_record(key, value)
+        if normalized is None:
+            continue
+        result[key] = normalized
 
     logger.debug('Завантажено %s запис(ів) user_map', len(result))
     return result
+
+
+def _normalize_user_record(key: str, value: object) -> UserMapEntry | str | None:
+    """Перетворити будь-який запис user_map на уніфікований вигляд."""
+    mapping_value: Mapping[str, object] | None = as_mapping(value)
+    if mapping_value is not None:
+        return _extract_entry(mapping_value)
+
+    if isinstance(value, str):
+        return value
+
+    logger.debug('Пропускаю запис user_map %s через некоректний формат: %r', key, value)
+    return None
+
+
+def _extract_entry(mapping_value: Mapping[str, object]) -> UserMapEntry:
+    """Створити ``UserMapEntry`` із словникового значення."""
+    entry: UserMapEntry = {}
+
+    login_val: object | None = mapping_value.get('login')
+    if isinstance(login_val, str):
+        entry['login'] = login_val
+
+    email_val: object | None = mapping_value.get('email')
+    if isinstance(email_val, str):
+        entry['email'] = email_val
+
+    id_val: object | None = mapping_value.get('id')
+    if isinstance(id_val, str):
+        entry['id'] = id_val
+
+    return entry
 
 
 def upsert_user_map_entry(
@@ -220,7 +241,6 @@ def upsert_user_map_entry(
     yt_user_id: str | None = None,
 ) -> None:
     """Додати або оновити запис користувача у ``user_map.json``."""
-
     if not any((login, email, yt_user_id)):
         msg = 'Потрібно надати принаймні одне з полів: login, email або yt_user_id'
         logger.error('Не вдалося оновити мапу користувачів: %s', msg)
@@ -256,7 +276,6 @@ def upsert_user_map_entry(
 
 def _write_mapping(path: Path, mapping: UserMap) -> None:
     """Зберегти ``user_map.json`` на диск."""
-
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(mapping, ensure_ascii=False, indent=2, sort_keys=True),
@@ -267,7 +286,6 @@ def _write_mapping(path: Path, mapping: UserMap) -> None:
 
 def is_login_taken(login: str, *, exclude_tg_user_id: int | None = None) -> bool:
     """Перевірити, чи закріплений логін за іншим Telegram користувачем."""
-
     path: Path | None = _resolve_map_path()
     if path is None or not login:
         return False
@@ -288,7 +306,7 @@ def is_login_taken(login: str, *, exclude_tg_user_id: int | None = None) -> bool
             login_val: object | None = raw_entry.get('login')
             if isinstance(login_val, str):
                 existing_login = login_val
-        elif isinstance(raw_entry, str):
+        else:
             existing_login = raw_entry
 
         if existing_login and existing_login.lower() == login_normalized:
@@ -305,9 +323,8 @@ def _ensure_unique_mapping(
     yt_user_id: str | None,
 ) -> None:
     """Переконатися, що логін та YouTrack ID не зайняті іншими користувачами."""
-
     target_key: str = str(tg_user_id)
-    login_normalized: str | None = login.lower() if isinstance(login, str) else None
+    login_normalized: str | None = login.lower() if login is not None else None
 
     for existing_key, raw_entry in mapping.items():
         if existing_key == target_key:
@@ -323,7 +340,7 @@ def _ensure_unique_mapping(
             yt_val: object | None = raw_entry.get('id')
             if isinstance(yt_val, str):
                 existing_yt_id = yt_val
-        elif isinstance(raw_entry, str):
+        else:
             existing_login = raw_entry
 
         if login_normalized and existing_login and existing_login.lower() == login_normalized:

@@ -10,10 +10,11 @@ from agromat_it_desk_bot.utils import as_mapping, resolve_from_map
 from agromat_it_desk_bot.youtrack_client import (
     CustomField,
     CustomFieldMap,
+    YouTrackUser,
     assign_custom_field,
     fetch_issue_custom_fields,
-    find_user,
     find_state_value_id,
+    find_user,
     find_user_id,
     get_issue_internal_id,
 )
@@ -51,49 +52,17 @@ def assign_issue(issue_id_readable: str, login: str | None, email: str | None, u
     if issue_id is None:
         return False
 
-    yt_user_id: str | None = user_id or find_user_id(login, email)
+    yt_user_id: str | None = _resolve_target_user_id(login, email, user_id)
     if yt_user_id is None:
-        logger.error('Не вдалося визначити ID користувача (login=%s, email=%s)', login, email)
         return False
 
-    fields_optional: CustomFieldMap | None = fetch_issue_custom_fields(
-        issue_id,
-        {YOUTRACK_ASSIGNEE_FIELD_NAME, 'assignee'},
-    )
-    if not fields_optional:
-        logger.error('Поле виконавця не знайдено у задачі %s', issue_id_readable)
+    assignee_field_id: str | None = _resolve_assignee_field_id(issue_id, issue_id_readable)
+    if assignee_field_id is None:
         return False
 
-    assert fields_optional is not None
-    fields_map: CustomFieldMap = fields_optional
+    payload: dict[str, object] = {'value': _build_assignee_value(yt_user_id, login, email)}
 
-    assignee_field: CustomField | None = _pick_field(
-        fields_map,
-        {YOUTRACK_ASSIGNEE_FIELD_NAME, 'assignee'},
-    )
-    if assignee_field is None:
-        logger.error('Поле виконавця не знайдено у задачі %s', issue_id_readable)
-        return False
-
-    project_custom: Mapping[str, object] | dict[str, object] = as_mapping(assignee_field.get(
-        'projectCustomField')) or {}
-    field_id: object | None = project_custom.get('id')
-    if not isinstance(field_id, str):
-        logger.error('ID поля виконавця відсутній у задачі %s', issue_id_readable)
-        return False
-
-    value_payload: dict[str, object] = {
-        'id': yt_user_id,
-        '$type': 'User',
-    }
-    if login:
-        value_payload['login'] = login
-    if email:
-        value_payload['email'] = email
-
-    payload: dict[str, object] = {'value': value_payload}
-
-    if assign_custom_field(issue_id, field_id, payload):
+    if assign_custom_field(issue_id, assignee_field_id, payload):
         logger.info('Задачу %s призначено на користувача id=%s login=%s', issue_id_readable, yt_user_id, login)
         return True
 
@@ -168,20 +137,76 @@ def _pick_field(fields: CustomFieldMap, names: set[str]) -> CustomField | None:
 
 def lookup_user_by_login(login: str) -> tuple[str | None, str | None, str | None]:
     """Повернути (логін, email, id) користувача YouTrack за логіном."""
-
     if not login:
         return None, None, None
 
-    user = find_user(login, None)
+    user: YouTrackUser | None = find_user(login, None)
     if user is None:
         return None, None, None
 
-    login_value = user.get('login')
+    login_value: str | None = user.get('login')
     resolved_login: str | None = login_value if isinstance(login_value, str) else login
 
-    email_value = user.get('email')
+    email_value: str | None = user.get('email')
     email: str | None = email_value if isinstance(email_value, str) else None
 
-    user_id_value = user.get('id')
+    user_id_value: str | None = user.get('id')
     yt_user_id: str | None = user_id_value if isinstance(user_id_value, str) else None
     return resolved_login, email, yt_user_id
+
+
+def _resolve_target_user_id(
+    login: str | None,
+    email: str | None,
+    user_id: str | None,
+) -> str | None:
+    """Визначити внутрішній ID користувача YouTrack."""
+    if user_id:
+        return user_id
+
+    yt_user_id: str | None = find_user_id(login, email)
+    if yt_user_id is None:
+        logger.error('Не вдалося визначити ID користувача (login=%s, email=%s)', login, email)
+    return yt_user_id
+
+
+def _resolve_assignee_field_id(issue_id: str, issue_id_readable: str) -> str | None:
+    """Повернути ID поля виконавця для задачі."""
+    fields_optional: CustomFieldMap | None = fetch_issue_custom_fields(
+        issue_id,
+        {YOUTRACK_ASSIGNEE_FIELD_NAME, 'assignee'},
+    )
+    if not fields_optional:
+        logger.error('Поле виконавця не знайдено у задачі %s', issue_id_readable)
+        return None
+
+    fields_map: CustomFieldMap = fields_optional
+    assignee_field: CustomField | None = _pick_field(
+        fields_map,
+        {YOUTRACK_ASSIGNEE_FIELD_NAME, 'assignee'},
+    )
+    if assignee_field is None:
+        logger.error('Поле виконавця не знайдено у задачі %s', issue_id_readable)
+        return None
+
+    project_custom: Mapping[str, object] | dict[str, object] = as_mapping(assignee_field.get(
+        'projectCustomField')) or {}
+    field_id: object | None = project_custom.get('id')
+    if not isinstance(field_id, str):
+        logger.error('ID поля виконавця відсутній у задачі %s', issue_id_readable)
+        return None
+
+    return field_id
+
+
+def _build_assignee_value(yt_user_id: str, login: str | None, email: str | None) -> dict[str, object]:
+    """Зібрати тіло значення для призначення виконавця."""
+    value_payload: dict[str, object] = {
+        'id': yt_user_id,
+        '$type': 'User',
+    }
+    if login:
+        value_payload['login'] = login
+    if email:
+        value_payload['email'] = email
+    return value_payload
