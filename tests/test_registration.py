@@ -74,7 +74,9 @@ def patch_resolve_login_details(
         if details is None and failure_message is not None:
             main_module.call_api(
                 'sendMessage',
-                {'chat_id': chat_id, 'text': failure_message, 'disable_web_page_preview': True},
+                {'chat_id': chat_id,
+                 'text': failure_message,
+                 'disable_web_page_preview': True},
             )
             return None
         return details
@@ -86,6 +88,7 @@ def test_register_same_login_returns_notice(
     monkeypatch: pytest.MonkeyPatch,
     clear_state: SentMessages,
 ) -> None:
+    """/register із тим самим логіном має повернути інформаційне повідомлення."""
     patch_resolve_from_map(monkeypatch, ('existing', 'mail', 'YT-1'))
 
     message: dict[str, object] = build_message(111, '/register existing')
@@ -102,6 +105,7 @@ def test_register_new_login_requires_confirmation(
     monkeypatch: pytest.MonkeyPatch,
     clear_state: SentMessages,
 ) -> None:
+    """/register із новим логіном має вимагати підтвердження."""
     requested = PendingLoginChange('newlogin', 'newlogin', 'user@example.com', 'YT-2')
 
     patch_resolve_from_map(monkeypatch, ('oldlogin', 'mail', 'YT-1'))
@@ -122,6 +126,7 @@ def test_register_fails_when_login_unknown(
     monkeypatch: pytest.MonkeyPatch,
     clear_state: SentMessages,
 ) -> None:
+    """Коли логін не знайдено в YouTrack, бот має одразу відповісти про помилку."""
     patch_resolve_from_map(monkeypatch, (None, None, None))
     patch_resolve_login_details(
         monkeypatch,
@@ -143,6 +148,7 @@ def test_register_new_login_creates_entry(
     monkeypatch: pytest.MonkeyPatch,
     clear_state: SentMessages,
 ) -> None:
+    """/register без попереднього логіна створює новий запис у user_map."""
     requested = PendingLoginChange('fresh', 'fresh', 'fresh@example.com', 'YT-3')
 
     patch_resolve_from_map(monkeypatch, (None, None, None))
@@ -177,6 +183,7 @@ def test_confirm_login_success(
     monkeypatch: pytest.MonkeyPatch,
     clear_state: SentMessages,
 ) -> None:
+    """/confirm_login підтверджує зміну логіна та оновлює user_map."""
     details = PendingLoginChange('target', 'target', 'user@example.com', 'YT-5')
     pending_login_updates[555] = details
 
@@ -211,6 +218,7 @@ def test_confirm_login_rejects_foreign_login(
     monkeypatch: pytest.MonkeyPatch,
     clear_state: SentMessages,
 ) -> None:
+    """Підтвердження має відхилятись, якщо логін уже зайнятий іншою особою."""
     details = PendingLoginChange('target', 'target', 'user@example.com', 'YT-5')
     pending_login_updates[777] = details
 

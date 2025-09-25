@@ -19,6 +19,7 @@ def tmp_user_map(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def test_is_login_taken_detects_existing(tmp_user_map: Path) -> None:
+    """Перевірити, що is_login_taken знаходить зайнятий логін."""
     data: dict[str, dict[str, str]] = {'100': {'login': 'support', 'id': 'YT-1'}}
     tmp_user_map.write_text(json.dumps(data, ensure_ascii=False))
 
@@ -28,6 +29,7 @@ def test_is_login_taken_detects_existing(tmp_user_map: Path) -> None:
 
 
 def test_upsert_user_map_entry_blocks_duplicate_login(tmp_user_map: Path) -> None:
+    """Гарантувати помилку при спробі привʼязати чужий логін."""
     data: dict[str, dict[str, str]] = {'100': {'login': 'support', 'id': 'YT-1'}}
     tmp_user_map.write_text(json.dumps(data, ensure_ascii=False))
 
@@ -36,6 +38,7 @@ def test_upsert_user_map_entry_blocks_duplicate_login(tmp_user_map: Path) -> Non
 
 
 def test_upsert_user_map_entry_allows_same_user_update(tmp_user_map: Path) -> None:
+    """Оновлення даних для того самого Telegram користувача має проходити успішно."""
     utils.upsert_user_map_entry(100, login='support', yt_user_id='YT-1')
     utils.upsert_user_map_entry(100, login='support', email='user@example.com', yt_user_id='YT-1')
 
