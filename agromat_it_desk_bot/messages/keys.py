@@ -11,7 +11,7 @@ class Msg(str, Enum):
     групування повідомлень.
     """
 
-    # Інформаційні повідомлення
+    # Групують інформаційні повідомлення
     HELP_REGISTER = 'help.register'
     REGISTER_ALREADY = 'register.already'
     REGISTER_PROMPT_CONFIRM = 'register.prompt_confirm'
@@ -19,7 +19,7 @@ class Msg(str, Enum):
     REGISTER_UPDATED_NOTE = 'register.updated_note'
     CALLBACK_ACCEPTED = 'callback.accepted'
 
-    # Помилки та попередження
+    # Групують помилки та попередження
     ERR_REGISTER_FORMAT = 'err.register_format'
     ERR_CONFIRM_FORMAT = 'err.confirm_format'
     ERR_TG_ID_UNAVAILABLE = 'err.tg_id_unavailable'

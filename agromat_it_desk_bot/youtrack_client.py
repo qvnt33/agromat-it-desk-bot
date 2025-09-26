@@ -6,7 +6,7 @@ import logging
 from collections.abc import Iterable, Mapping
 from typing import TypedDict, cast
 
-import requests
+import requests  # type: ignore[import-untyped]
 
 from agromat_it_desk_bot.config import YT_BASE_URL, YT_TOKEN
 from agromat_it_desk_bot.utils import as_mapping
@@ -36,15 +36,13 @@ class YouTrackUser(TypedDict, total=False):
 
 
 def get_issue_internal_id(issue_id_readable: str) -> str | None:
-    """Повернути внутрішній ID задачі за ``idReadable``.
+    """Повертає внутрішній ID задачі за ``idReadable``.
 
     :param issue_id_readable: Короткий ідентифікатор задачі (наприклад, ``ABC-123``).
-    :type issue_id_readable: str
     :returns: Внутрішній ID, якщо задачу знайдено, інакше ``None``.
-    :rtype: str | None
     """
     headers: dict[str, str] = _base_headers()
-    # Пошук задачі за коротким ID за допомогою REST API YouTrack
+    # Виконують пошук задачі за коротким ID за допомогою REST API YouTrack
     response: requests.Response = requests.get(
         f'{YT_BASE_URL}/api/issues',
         params={'query': issue_id_readable, 'fields': 'id,idReadable'},
@@ -66,17 +64,14 @@ def get_issue_internal_id(issue_id_readable: str) -> str | None:
 
 
 def fetch_issue_custom_fields(issue_internal_id: str, field_names: Iterable[str]) -> CustomFieldMap | None:
-    """Отримати опис кастомних полів задачі.
+    """Отримує опис кастомних полів задачі.
 
     :param issue_internal_id: Внутрішній ID задачі.
-    :type issue_internal_id: str
     :param field_names: Назви полів, які необхідно знайти.
-    :type field_names: Iterable[str]
     :returns: Словник ``назва поля -> опис`` або ``None``.
-    :rtype: dict[str, object] | None
     """
     headers: dict[str, str] = _base_headers()
-    # Повернути повний список customFields для подальшої фільтрації
+    # Отримують повний список customFields для подальшої фільтрації
     response: requests.Response = requests.get(
         f'{YT_BASE_URL}/api/issues/{issue_internal_id}',
         params={'fields': 'customFields(id,name,projectCustomField(id,field(id,name),bundle(values(id,name))))'},
@@ -93,10 +88,10 @@ def fetch_issue_custom_fields(issue_internal_id: str, field_names: Iterable[str]
     result: CustomFieldMap = {}
     normalized: set[str] = {name.lower() for name in field_names}
     for custom_field in custom_fields:
-        project_custom: Mapping[str, object] | dict[str, object] = as_mapping(custom_field.get(
-            'projectCustomField')) or {}
-        field_info: Mapping[str, object] | dict[str, object] = as_mapping(project_custom.get(
-            'field')) or {}
+        project_custom: Mapping[str, object] | dict[str, object] = (
+            as_mapping(custom_field.get('projectCustomField')) or {}
+        )
+        field_info: Mapping[str, object] | dict[str, object] = as_mapping(project_custom.get('field')) or {}
         field_name: object | None = field_info.get('name')
         if isinstance(field_name, str) and field_name.lower() in normalized:
             result[field_name.lower()] = cast(CustomField, custom_field)
@@ -104,16 +99,12 @@ def fetch_issue_custom_fields(issue_internal_id: str, field_names: Iterable[str]
 
 
 def assign_custom_field(issue_internal_id: str, field_id: str, payload: dict[str, object]) -> bool:
-    """Оновити значення custom field для задачі.
+    """Оновлює значення custom field для задачі.
 
     :param issue_internal_id: Внутрішній ID задачі.
-    :type issue_internal_id: str
     :param field_id: Ідентифікатор кастомного поля.
-    :type field_id: str
     :param payload: Тіло запиту з новим значенням.
-    :type payload: dict[str, object]
     :returns: ``True`` у разі успішного оновлення, інакше ``False``.
-    :rtype: bool
     """
     headers: dict[str, str] = _base_headers()
     response: requests.Response = requests.post(
@@ -130,7 +121,7 @@ def assign_custom_field(issue_internal_id: str, field_id: str, payload: dict[str
 
 
 def find_user(login: str | None, email: str | None) -> YouTrackUser | None:
-    """Повернути опис користувача YouTrack за логіном."""
+    """Повертає опис користувача YouTrack за логіном."""
     if not login:
         logger.warning('find_user викликано без логіна (email=%s)', email)
         return None
@@ -160,7 +151,7 @@ def find_user(login: str | None, email: str | None) -> YouTrackUser | None:
 
 
 def find_user_id(login: str | None, email: str | None) -> str | None:
-    """Визначити ID користувача за логіном або email."""
+    """Визначає ID користувача за логіном або email."""
     user: YouTrackUser | None = find_user(login, email)
     if user is None:
         return None
@@ -170,10 +161,11 @@ def find_user_id(login: str | None, email: str | None) -> str | None:
 
 
 def _search_users(query: str) -> list[dict[str, object]] | None:
-    """Виконати пошук користувачів у YouTrack за довільним запитом."""
+    """Виконує пошук користувачів у YouTrack за довільним запитом."""
     headers: dict[str, str] = _base_headers()
+    users_endpoint: str = f'{YT_BASE_URL}/api/users'
     response: requests.Response = requests.get(
-        f'{YT_BASE_URL}/api/users',
+        users_endpoint,
         params={'query': query, 'fields': 'id,login,email'},
         headers=headers,
         timeout=10,
@@ -186,7 +178,7 @@ def _search_users(query: str) -> list[dict[str, object]] | None:
 
 
 def _map_user(candidate: Mapping[str, object]) -> YouTrackUser | None:
-    """Привести запис користувача до ``YouTrackUser``."""
+    """Приводить запис користувача до ``YouTrackUser``."""
     result: YouTrackUser = {}
 
     id_val: object | None = candidate.get('id')
@@ -205,19 +197,16 @@ def _map_user(candidate: Mapping[str, object]) -> YouTrackUser | None:
 
 
 def find_state_value_id(field_data: CustomField, desired_state: str) -> str | None:
-    """Знайти ідентифікатор значення стану у бандлі кастомного поля.
+    """Знаходить ідентифікатор значення стану у бандлі кастомного поля.
 
     :param field_data: Опис кастомного поля, отриманий із YouTrack.
-    :type field_data: dict[str, object]
-    :param desired_state: Назва стану, яке шукаємо.
-    :type desired_state: str
+    :param desired_state: Назва стану, яке шукають.
     :returns: Ідентифікатор значення стану або ``None``.
-    :rtype: str | None
     """
     project_custom: Mapping[str, object] | dict[str, object] = as_mapping(field_data.get('projectCustomField')) or {}
     bundle: Mapping[str, object] | dict[str, object] = as_mapping(project_custom.get('bundle')) or {}
     values: list[dict[str, object]] = cast(list[dict[str, object]], bundle.get('values') or [])
-    # Перевірити усі доступні значення стану та знайти потрібне
+    # Перевіряють усі доступні значення стану та знаходять потрібне
     for value in values:
         if value.get('name') == desired_state and isinstance(value.get('id'), str):
             return str(value['id'])
@@ -225,10 +214,6 @@ def find_state_value_id(field_data: CustomField, desired_state: str) -> str | No
 
 
 def _base_headers() -> dict[str, str]:
-    """Повернути стандартні заголовки для викликів YouTrack API."""
+    """Повертає стандартні заголовки для викликів YouTrack API."""
     assert YT_TOKEN
-    return {
-        'Authorization': f'Bearer {YT_TOKEN}',
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-    }
+    return {'Authorization': f'Bearer {YT_TOKEN}', 'Accept': 'application/json', 'Content-Type': 'application/json'}

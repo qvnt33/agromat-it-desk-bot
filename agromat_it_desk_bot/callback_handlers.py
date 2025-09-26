@@ -1,4 +1,4 @@
-"""Хелпери для обробки Telegram callback'ів (кнопка «Прийняти»)."""
+"""Надає хелпери для обробки Telegram callback'ів (кнопка «Прийняти»)."""
 
 from __future__ import annotations
 
@@ -8,11 +8,7 @@ from typing import Any, NamedTuple
 
 from fastapi import HTTPException, Request
 
-from agromat_it_desk_bot.config import (
-    ALLOWED_TG_USER_IDS,
-    TELEGRAM_WEBHOOK_SECRET,
-    YOUTRACK_STATE_IN_PROGRESS,
-)
+from agromat_it_desk_bot.config import ALLOWED_TG_USER_IDS, TELEGRAM_WEBHOOK_SECRET, YOUTRACK_STATE_IN_PROGRESS
 from agromat_it_desk_bot.telegram_service import call_api
 from agromat_it_desk_bot.utils import as_mapping
 from agromat_it_desk_bot.youtrack_service import assign_issue, resolve_account, set_state
@@ -21,7 +17,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 class CallbackContext(NamedTuple):
-    """Структурований набір параметрів із callback-повідомлення Telegram."""
+    """Описує структурований набір параметрів із callback-повідомлення Telegram."""
 
     callback_id: str
     chat_id: int
@@ -31,10 +27,9 @@ class CallbackContext(NamedTuple):
 
 
 def verify_telegram_secret(request: Request) -> None:
-    """Перевірити секрет вебхука Telegram перед обробкою callback.
+    """Перевіряє секрет вебхука Telegram перед обробкою callback.
 
     :param request: Запит FastAPI із заголовками Telegram.
-    :type request: Request
     :raises HTTPException: 403, якщо секрет не збігається.
     """
     if TELEGRAM_WEBHOOK_SECRET:
@@ -45,12 +40,10 @@ def verify_telegram_secret(request: Request) -> None:
 
 
 def parse_callback_payload(payload: Any) -> CallbackContext | None:
-    """Розібрати callback-пейлоад та побудувати контекст.
+    """Розбирає callback-пейлоад та будує контекст.
 
     :param payload: Сирий JSON із даними Telegram.
-    :type payload: Any
     :returns: ``CallbackContext`` або ``None``.
-    :rtype: CallbackContext | None
     """
     callback: Mapping[str, object] | None = as_mapping(payload.get('callback_query'))
     if callback is None:
@@ -90,12 +83,10 @@ def parse_callback_payload(payload: Any) -> CallbackContext | None:
 
 
 def is_user_allowed(tg_user_id: int | None) -> bool:
-    """Перевірити, чи має користувач право натискати кнопку «Прийняти».
+    """Перевіряє, чи має користувач право натискати кнопку «Прийняти».
 
     :param tg_user_id: Telegram ID користувача.
-    :type tg_user_id: int | None
     :returns: ``True`` якщо користувач дозволений або whitelist порожній.
-    :rtype: bool
     """
     if tg_user_id is None:
         return False
@@ -112,24 +103,20 @@ def is_user_allowed(tg_user_id: int | None) -> bool:
 
 
 def parse_action(payload: str) -> tuple[str, str | None]:
-    """Виділити назву дії та параметр із callback-рядка.
+    """Виділяє назву дії та параметр із callback-рядка.
 
     :param payload: Рядок формату ``"accept|ABC-1"``.
-    :type payload: str
     :returns: Пару ``(назва дії, ID задачі)``.
-    :rtype: tuple[str, str | None]
     """
     action, _, issue_id = payload.partition('|')
     return action, issue_id or None
 
 
 def handle_accept(issue_id: str, context: CallbackContext) -> None:
-    """Призначити задачу в YouTrack та відповісти користувачу.
+    """Призначає задачу в YouTrack та відповідає користувачу.
 
     :param issue_id: Читабельний ID задачі.
-    :type issue_id: str
     :param context: Контекст callback-запиту.
-    :type context: CallbackContext
     """
     try:
         login: str | None
@@ -154,70 +141,36 @@ def handle_accept(issue_id: str, context: CallbackContext) -> None:
 
 
 def reply_insufficient_rights(callback_id: str) -> None:
-    """Повідомити про відсутність прав у користувача."""
-    call_api(
-        'answerCallbackQuery',
-        {
-            'callback_query_id': callback_id,
-            'text': 'Недостатньо прав',
-            'show_alert': True,
-        },
-    )
+    """Повідомляє про відсутність прав у користувача."""
+    call_api('answerCallbackQuery', {'callback_query_id': callback_id, 'text': 'Недостатньо прав', 'show_alert': True})
 
 
 def reply_unknown_action(callback_id: str) -> None:
-    """Відповісти на невідому дію callback-даних."""
-    call_api(
-        'answerCallbackQuery',
-        {
-            'callback_query_id': callback_id,
-            'text': 'Невідома дія',
-        },
-    )
+    """Відповідає на невідому дію callback-даних."""
+    call_api('answerCallbackQuery', {'callback_query_id': callback_id, 'text': 'Невідома дія'})
 
 
 def reply_success(callback_id: str) -> None:
-    """Підтвердити користувачу успішне призначення."""
-    call_api(
-        'answerCallbackQuery',
-        {
-            'callback_query_id': callback_id,
-            'text': 'Прийнято ✅',
-        },
-    )
+    """Підтверджує користувачу успішне призначення."""
+    call_api('answerCallbackQuery', {'callback_query_id': callback_id, 'text': 'Прийнято ✅'})
 
 
 def reply_assign_failed(callback_id: str) -> None:
-    """Повідомити про невдалу спробу призначення."""
-    call_api(
-        'answerCallbackQuery',
-        {
-            'callback_query_id': callback_id,
-            'text': 'Не вдалося призначити',
-            'show_alert': True,
-        },
-    )
+    """Повідомляє про невдалу спробу призначення."""
+    payload: dict[str, object] = {'callback_query_id': callback_id, 'text': 'Не вдалося призначити', 'show_alert': True}
+    call_api('answerCallbackQuery', payload)
 
 
 def reply_assign_error(callback_id: str) -> None:
-    """Показати системну помилку під час прийняття."""
-    call_api(
-        'answerCallbackQuery',
-        {
-            'callback_query_id': callback_id,
-            'text': 'Помилка: не вдалось прийняти',
-            'show_alert': True,
-        },
-    )
+    """Показує системну помилку під час прийняття."""
+    payload: dict[str, object] = {
+        'callback_query_id': callback_id,
+        'text': 'Помилка: не вдалось прийняти',
+        'show_alert': True,
+    }
+    call_api('answerCallbackQuery', payload)
 
 
 def remove_keyboard(chat_id: int, message_id: int) -> None:
-    """Прибрати клавіатуру з повідомлення Telegram після успішного прийняття."""
-    call_api(
-        'editMessageReplyMarkup',
-        {
-            'chat_id': chat_id,
-            'message_id': message_id,
-            'reply_markup': {},
-        },
-    )
+    """Прибирає клавіатуру з повідомлення Telegram після успішного прийняття."""
+    call_api('editMessageReplyMarkup', {'chat_id': chat_id, 'message_id': message_id, 'reply_markup': {}})

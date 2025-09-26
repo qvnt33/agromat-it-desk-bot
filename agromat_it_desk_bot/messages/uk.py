@@ -14,14 +14,12 @@ UK: Mapping[Msg, str] = {
         '/register <логін>. Бот підставить решту даних автоматично.'
     ),
     Msg.REGISTER_ALREADY: (
-        'Ви вже зареєстровані як {login}.\n'
-        'Якщо потрібно змінити логін – надіслати /register {suggested}.'
+        'Ви вже зареєстровані як {login}.\nЯкщо потрібно змінити логін – надіслати /register {suggested}.'
     ),
     Msg.REGISTER_PROMPT_CONFIRM: 'Запит отримано. Підтвердити зміну: /confirm_login {login}',
     Msg.REGISTER_SAVED: '✅ Дані збережено: {login} · {email} · {yt_id}',
     Msg.REGISTER_UPDATED_NOTE: 'Логін оновлено з {previous} на {current}.',
     Msg.CALLBACK_ACCEPTED: 'Прийнято ✅',
-
     # Помилки та попередження
     Msg.ERR_REGISTER_FORMAT: 'Формат команди: /register <логін>',
     Msg.ERR_CONFIRM_FORMAT: 'Формат команди: /confirm_login <логін>',

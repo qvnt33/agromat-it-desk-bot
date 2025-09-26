@@ -27,40 +27,31 @@ UserMap = dict[str, UserMapEntry | str]
 
 
 def configure_logging(config_path: Path | None = None) -> None:
-    """Завантажити конфіг логування з ``logging.conf`` або застосувати дефолт."""
-    target_path: Path = (
-        config_path
-        if config_path is not None
-        else Path(__file__).resolve().parents[1] / 'logging.conf'
-    )
+    """Завантажує конфіг логування з ``logging.conf`` або застосовує дефолт."""
+    target_path: Path = config_path if config_path is not None else Path(__file__).resolve().parents[1] / 'logging.conf'
     try:
         with target_path.open('r', encoding='utf-8') as config_file:
             config_data: dict[str, Any] = json.load(config_file)
     except FileNotFoundError:
         logging.basicConfig(level=logging.INFO)
-        logging.getLogger(__name__).warning(
-            'logging.conf не знайдено (%s), використовую базову конфігурацію',
-            target_path,
-        )
+        message_missing: str = 'logging.conf не знайдено (%s), використовую базову конфігурацію'
+        logging.getLogger(__name__).warning(message_missing, target_path)
     except json.JSONDecodeError as exc:
         logging.basicConfig(level=logging.INFO)
-        logging.getLogger(__name__).warning(
-            'Не вдалося прочитати logging.conf (%s): %s, використовую базову конфігурацію',
-            target_path,
-            exc,
-        )
+        message_invalid: str = 'Не вдалося прочитати logging.conf (%s): %s, використовую базову конфігурацію'
+        logging.getLogger(__name__).warning(message_invalid, target_path, exc)
     else:
         logging.config.dictConfig(config_data)
 
 
 def get_str(source: Mapping[str, object], key: str) -> str:
-    """Повернути значення ключа як рядок без зайвих пробілів."""
+    """Повертає значення ключа як рядок без зайвих пробілів."""
     value: object | None = source.get(key)
     return '' if value is None else str(value).strip()
 
 
 def extract_issue_id(issue: Mapping[str, object]) -> str:
-    """Отримати читабельний ID задачі з доступних полів або сформувати його."""
+    """Отримує читабельний ID задачі з доступних полів або формує його."""
     identifier: str = get_str(issue, 'idReadable') or get_str(issue, 'id')
     if identifier:
         return identifier
@@ -86,7 +77,7 @@ def extract_issue_id(issue: Mapping[str, object]) -> str:
 
 
 def format_message(issue_id: str, summary_raw: str, description_raw: str, url: str | None) -> str:
-    """Сформувати HTML-повідомлення для Telegram."""
+    """Формує HTML-повідомлення для Telegram."""
     summary: str = escape(summary_raw)
     description: str = escape(description_raw)
     parts: list[str] = [f'<b>{escape(issue_id)}</b> — {summary}']
@@ -96,9 +87,7 @@ def format_message(issue_id: str, summary_raw: str, description_raw: str, url: s
 
     if description:
         shortened: str = (
-            f'{description[:DESCRIPTION_MAX_LEN]}…'
-            if len(description) > DESCRIPTION_MAX_LEN
-            else description
+            f'{description[:DESCRIPTION_MAX_LEN]}…' if len(description) > DESCRIPTION_MAX_LEN else description
         )
         parts.append(shortened)
 
@@ -106,14 +95,14 @@ def format_message(issue_id: str, summary_raw: str, description_raw: str, url: s
 
 
 def as_mapping(obj: object | None) -> Mapping[str, object] | None:
-    """Повернути словник, якщо обʼєкт є ``dict``."""
+    """Повертає словник, якщо обʼєкт є ``dict``."""
     if isinstance(obj, dict):
-        return obj  # type: ignore
+        return cast(Mapping[str, object], obj)
     return None
 
 
 def resolve_from_map(tg_user_id: int | None) -> tuple[str | None, str | None, str | None]:
-    """Знайти (login, email, yt_user_id) для користувача з Telegram ID."""
+    """Знаходить ``login``, ``email`` та ``yt_user_id`` для користувача з Telegram ID."""
     login: str | None = None
     email: str | None = None
     yt_user_id: str | None = None
@@ -137,13 +126,7 @@ def resolve_from_map(tg_user_id: int | None) -> tuple[str | None, str | None, st
             login = login_value if isinstance(login_value, str) else None
             email = email_value if isinstance(email_value, str) else None
             yt_user_id = yt_user_value if isinstance(yt_user_value, str) else None
-            logger.debug(
-                'Мапа користувача %s: login=%s email=%s yt_id=%s',
-                tg_user_id,
-                login,
-                email,
-                yt_user_id,
-            )
+            logger.debug('Мапа користувача %s: login=%s email=%s yt_id=%s', tg_user_id, login, email, yt_user_id)
         elif isinstance(entry, str):
             login = entry
             logger.debug('Мапа користувача %s: login=%s (рядок)', tg_user_id, login)
@@ -156,7 +139,7 @@ def resolve_from_map(tg_user_id: int | None) -> tuple[str | None, str | None, st
 
 
 def _resolve_map_path() -> Path | None:
-    """Повернути шлях до JSON-файла з мапою користувачів."""
+    """Повертає шлях до JSON-файла з мапою користувачів."""
     target_file: Path = USER_MAP_FILE
     if target_file.is_dir():
         candidate: Path = target_file / 'user_map.json'
@@ -167,7 +150,7 @@ def _resolve_map_path() -> Path | None:
 
 
 def _load_mapping(path: Path) -> UserMap:
-    """Завантажити JSON-дані з файлу мапи користувачів."""
+    """Завантажує JSON-дані з файлу мапи користувачів."""
     raw_text: str = path.read_text(encoding='utf-8')
     if not raw_text.strip():
         logger.warning('USER_MAP_FILE %s порожній, використовую порожню мапу', path)
@@ -202,7 +185,7 @@ def _load_mapping(path: Path) -> UserMap:
 
 
 def _normalize_user_record(key: str, value: object) -> UserMapEntry | str | None:
-    """Перетворити будь-який запис user_map на уніфікований вигляд."""
+    """Перетворює будь-який запис user_map на уніфікований вигляд."""
     mapping_value: Mapping[str, object] | None = as_mapping(value)
     if mapping_value is not None:
         return _extract_entry(mapping_value)
@@ -215,7 +198,7 @@ def _normalize_user_record(key: str, value: object) -> UserMapEntry | str | None
 
 
 def _extract_entry(mapping_value: Mapping[str, object]) -> UserMapEntry:
-    """Створити ``UserMapEntry`` із словникового значення."""
+    """Створює ``UserMapEntry`` із словникового значення."""
     entry: UserMapEntry = {}
 
     login_val: object | None = mapping_value.get('login')
@@ -234,13 +217,9 @@ def _extract_entry(mapping_value: Mapping[str, object]) -> UserMapEntry:
 
 
 def upsert_user_map_entry(
-    tg_user_id: int,
-    *,
-    login: str | None = None,
-    email: str | None = None,
-    yt_user_id: str | None = None,
+    tg_user_id: int, *, login: str | None = None, email: str | None = None, yt_user_id: str | None = None
 ) -> None:
-    """Додати або оновити запис користувача у ``user_map.json``."""
+    """Додає або оновлює запис користувача у ``user_map.json``."""
     if not any((login, email, yt_user_id)):
         msg = 'Потрібно надати принаймні одне з полів: login, email або yt_user_id'
         logger.error('Не вдалося оновити мапу користувачів: %s', msg)
@@ -275,17 +254,14 @@ def upsert_user_map_entry(
 
 
 def _write_mapping(path: Path, mapping: UserMap) -> None:
-    """Зберегти ``user_map.json`` на диск."""
+    """Зберігає ``user_map.json`` на диск."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(mapping, ensure_ascii=False, indent=2, sort_keys=True),
-        encoding='utf-8',
-    )
+    path.write_text(json.dumps(mapping, ensure_ascii=False, indent=2, sort_keys=True), encoding='utf-8')
     logger.debug('Збережено user_map (%s записів) у %s', len(mapping), path)
 
 
 def is_login_taken(login: str, *, exclude_tg_user_id: int | None = None) -> bool:
-    """Перевірити, чи закріплений логін за іншим Telegram користувачем."""
+    """Перевіряє, чи закріплений логін за іншим Telegram користувачем."""
     path: Path | None = _resolve_map_path()
     if path is None or not login:
         return False
@@ -315,14 +291,8 @@ def is_login_taken(login: str, *, exclude_tg_user_id: int | None = None) -> bool
     return False
 
 
-def _ensure_unique_mapping(
-    mapping: UserMap,
-    tg_user_id: int,
-    *,
-    login: str | None,
-    yt_user_id: str | None,
-) -> None:
-    """Переконатися, що логін та YouTrack ID не зайняті іншими користувачами."""
+def _ensure_unique_mapping(mapping: UserMap, tg_user_id: int, *, login: str | None, yt_user_id: str | None) -> None:
+    """Переконує, що логін та YouTrack ID не зайняті іншими користувачами."""
     target_key: str = str(tg_user_id)
     login_normalized: str | None = login.lower() if login is not None else None
 

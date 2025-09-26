@@ -1,4 +1,4 @@
-"""Вищерівневі операції з YouTrack: мапінг користувачів, призначення задач, оновлення стану."""
+"""Забезпечує вищерівневі операції з YouTrack: мапінг користувачів, призначення задач, оновлення стану."""
 
 from __future__ import annotations
 
@@ -24,29 +24,22 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 def resolve_account(tg_user_id: int | None) -> tuple[str | None, str | None, str | None]:
-    """Визначити користувача YouTrack за TG ID через локальну мапу.
+    """Визначає користувача YouTrack за TG ID через локальну мапу.
 
     :param tg_user_id: Telegram ID користувача.
-    :type tg_user_id: int | None
     :returns: Логін, email та внутрішній ID користувача YouTrack.
-    :rtype: tuple[str | None, str | None, str | None]
     """
     return resolve_from_map(tg_user_id)
 
 
 def assign_issue(issue_id_readable: str, login: str | None, email: str | None, user_id: str | None) -> bool:
-    """Призначити задачу на вказаного користувача.
+    """Призначає задачу на вказаного користувача.
 
     :param issue_id_readable: Короткий ID задачі (``ABC-123``).
-    :type issue_id_readable: str
     :param login: Логін користувача YouTrack.
-    :type login: str | None
     :param email: Email користувача YouTrack.
-    :type email: str | None
     :param user_id: Внутрішній ID користувача (може бути ``None``).
-    :type user_id: str | None
     :returns: ``True`` у разі успішного призначення.
-    :rtype: bool
     """
     issue_id: str | None = get_issue_internal_id(issue_id_readable)
     if issue_id is None:
@@ -71,14 +64,11 @@ def assign_issue(issue_id_readable: str, login: str | None, email: str | None, u
 
 
 def set_state(issue_id_readable: str, desired_state: str | None) -> bool:
-    """Змінити стан задачі на вказане значення.
+    """Змінює стан задачі на вказане значення.
 
     :param issue_id_readable: Короткий ID задачі.
-    :type issue_id_readable: str
     :param desired_state: Назва стану, який потрібно встановити.
-    :type desired_state: str | None
     :returns: ``True`` при успішному оновленні, інакше ``False``.
-    :rtype: bool
     """
     if not desired_state:
         return True
@@ -87,20 +77,14 @@ def set_state(issue_id_readable: str, desired_state: str | None) -> bool:
     if issue_id is None:
         return False
 
-    fields_optional: CustomFieldMap | None = fetch_issue_custom_fields(
-        issue_id,
-        {YOUTRACK_STATE_FIELD_NAME, 'state'},
-    )
+    fields_optional: CustomFieldMap | None = fetch_issue_custom_fields(issue_id, {YOUTRACK_STATE_FIELD_NAME, 'state'})
     if not fields_optional:
         return False
 
     assert fields_optional is not None
     fields_map: CustomFieldMap = fields_optional
 
-    state_field: CustomField | None = _pick_field(
-        fields_map,
-        {YOUTRACK_STATE_FIELD_NAME, 'state'},
-    )
+    state_field: CustomField | None = _pick_field(fields_map, {YOUTRACK_STATE_FIELD_NAME, 'state'})
     if state_field is None:
         return False
 
@@ -111,9 +95,8 @@ def set_state(issue_id_readable: str, desired_state: str | None) -> bool:
 
     value_id: str | None = find_state_value_id(state_field, desired_state)
     if value_id is None:
-        logger.debug('Поле стану або значення не знайдено (field=%s, value=%s)',
-                     YOUTRACK_STATE_FIELD_NAME,
-                     desired_state)
+        message_missing: str = 'Поле стану або значення не знайдено (field=%s, value=%s)'
+        logger.debug(message_missing, YOUTRACK_STATE_FIELD_NAME, desired_state)
         return False
 
     value_payload: dict[str, object] = {'id': value_id}
@@ -127,7 +110,7 @@ def set_state(issue_id_readable: str, desired_state: str | None) -> bool:
 
 
 def _pick_field(fields: CustomFieldMap, names: set[str]) -> CustomField | None:
-    """Вибрати перше поле з переданих назв."""
+    """Вибирає перше поле з переданих назв."""
     for name in names:
         field: CustomField | None = fields.get(name.lower())
         if field is not None:
@@ -136,7 +119,7 @@ def _pick_field(fields: CustomFieldMap, names: set[str]) -> CustomField | None:
 
 
 def lookup_user_by_login(login: str) -> tuple[str | None, str | None, str | None]:
-    """Повернути (логін, email, id) користувача YouTrack за логіном."""
+    """Повертає ``login``, ``email`` та ``id`` користувача YouTrack за логіном."""
     if not login:
         return None, None, None
 
@@ -155,12 +138,8 @@ def lookup_user_by_login(login: str) -> tuple[str | None, str | None, str | None
     return resolved_login, email, yt_user_id
 
 
-def _resolve_target_user_id(
-    login: str | None,
-    email: str | None,
-    user_id: str | None,
-) -> str | None:
-    """Визначити внутрішній ID користувача YouTrack."""
+def _resolve_target_user_id(login: str | None, email: str | None, user_id: str | None) -> str | None:
+    """Визначає внутрішній ID користувача YouTrack."""
     if user_id:
         return user_id
 
@@ -171,26 +150,22 @@ def _resolve_target_user_id(
 
 
 def _resolve_assignee_field_id(issue_id: str, issue_id_readable: str) -> str | None:
-    """Повернути ID поля виконавця для задачі."""
-    fields_optional: CustomFieldMap | None = fetch_issue_custom_fields(
-        issue_id,
-        {YOUTRACK_ASSIGNEE_FIELD_NAME, 'assignee'},
-    )
+    """Повертає ID поля виконавця для задачі."""
+    assignee_fields: set[str] = {YOUTRACK_ASSIGNEE_FIELD_NAME, 'assignee'}
+    fields_optional: CustomFieldMap | None = fetch_issue_custom_fields(issue_id, assignee_fields)
     if not fields_optional:
         logger.error('Поле виконавця не знайдено у задачі %s', issue_id_readable)
         return None
 
     fields_map: CustomFieldMap = fields_optional
-    assignee_field: CustomField | None = _pick_field(
-        fields_map,
-        {YOUTRACK_ASSIGNEE_FIELD_NAME, 'assignee'},
-    )
+    assignee_field: CustomField | None = _pick_field(fields_map, assignee_fields)
     if assignee_field is None:
         logger.error('Поле виконавця не знайдено у задачі %s', issue_id_readable)
         return None
 
-    project_custom: Mapping[str, object] | dict[str, object] = as_mapping(assignee_field.get(
-        'projectCustomField')) or {}
+    project_custom: Mapping[str, object] | dict[str, object] = (
+        as_mapping(assignee_field.get('projectCustomField')) or {}
+    )
     field_id: object | None = project_custom.get('id')
     if not isinstance(field_id, str):
         logger.error('ID поля виконавця відсутній у задачі %s', issue_id_readable)
@@ -200,11 +175,8 @@ def _resolve_assignee_field_id(issue_id: str, issue_id_readable: str) -> str | N
 
 
 def _build_assignee_value(yt_user_id: str, login: str | None, email: str | None) -> dict[str, object]:
-    """Зібрати тіло значення для призначення виконавця."""
-    value_payload: dict[str, object] = {
-        'id': yt_user_id,
-        '$type': 'User',
-    }
+    """Збирає тіло значення для призначення виконавця."""
+    value_payload: dict[str, object] = {'id': yt_user_id, '$type': 'User'}
     if login:
         value_payload['login'] = login
     if email:

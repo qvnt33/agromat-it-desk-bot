@@ -1,4 +1,4 @@
-"""FastAPI застосунок для обробки вебхуків YouTrack та Telegram."""
+"""Забезпечує FastAPI застосунок для обробки вебхуків YouTrack та Telegram."""
 
 from __future__ import annotations
 
@@ -26,11 +26,7 @@ from agromat_it_desk_bot.callback_handlers import (
     reply_unknown_action,
     verify_telegram_secret,
 )
-from agromat_it_desk_bot.config import (
-    YT_BASE_URL,
-    YT_TOKEN,
-    YT_WEBHOOK_SECRET,
-)
+from agromat_it_desk_bot.config import YT_BASE_URL, YT_TOKEN, YT_WEBHOOK_SECRET
 from agromat_it_desk_bot.messages import Msg, render
 from agromat_it_desk_bot.telegram_service import call_api, send_message
 from agromat_it_desk_bot.utils import (
@@ -52,7 +48,7 @@ app = FastAPI()
 
 
 class PendingLoginChange(NamedTuple):
-    """Запис для відкладеного оновлення логіна."""
+    """Описує запис для відкладеного оновлення логіна."""
 
     requested_login: str
     resolved_login: str
@@ -65,27 +61,25 @@ pending_login_updates: dict[int, PendingLoginChange] = {}
 
 @app.post('/youtrack')
 async def youtrack_webhook(request: Request) -> dict[str, bool]:
-    """Обробити вебхук від YouTrack та повідомити Telegram.
+    """Обробляє вебхук від YouTrack та повідомляє Telegram.
 
-    Обробити JSON-пейлоад із даними задачі, сформувати текст повідомлення та
-    відправити його до Telegram. Якщо відомий ID задачі, додати кнопку
+    Обробляє JSON-пейлоад із даними задачі, формує текст повідомлення та
+    відправляє його до Telegram. Якщо відомий ID задачі, додає кнопку
     «Прийняти» для швидкої реакції інженера підтримки.
 
     :param request: Запит FastAPI з тілом вебхука.
-    :type request: Request
     :returns: Словник ``{"ok": True}`` у разі успішного виконання.
-    :rtype: dict[str, bool]
     :raises HTTPException: 400 при некоректному пейлоаді; 403 при невірному секреті.
     """
-    # YouTrack надсилає JSON-тіло з даними задачі
+    # Обробляють JSON тіло з даними задачі від YouTrack
     payload: Any = await request.json()
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail='Invalid payload shape')
 
-    # Гарантувати тип словника для подальшої роботи
+    # Забезпечують тип словника для подальшої роботи
     data: dict[str, object] = cast(dict[str, object], payload)
 
-    # Додатково перевірити секрет вебхука, якщо він увімкнений
+    # Перевіряють секрет вебхука, якщо він увімкнений
     if YT_WEBHOOK_SECRET is not None:
         auth_header: str | None = request.headers.get('Authorization')
         expected: str = f'Bearer {YT_WEBHOOK_SECRET}'
@@ -95,13 +89,13 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:
 
     logger.debug('Отримано вебхук YouTrack: %s', data)
 
-    # Дістати поле ``issue``, якщо YouTrack огортає дані в нього
+    # Виділяють поле ``issue``, якщо YouTrack огортає дані в нього
     issue_candidate: object | None = data.get('issue')
-    issue: Mapping[str, object] = cast(
-        dict[str, object], issue_candidate,
-    ) if isinstance(issue_candidate, dict) else data
+    issue: Mapping[str, object] = (
+        cast(dict[str, object], issue_candidate) if isinstance(issue_candidate, dict) else data
+    )
 
-    # Зібрати ключові атрибути для повідомлення
+    # Збирають ключові атрибути для повідомлення
     issue_id: str = extract_issue_id(issue)
     summary: str = get_str(issue, 'summary')
     description: str = get_str(issue, 'description')
@@ -117,9 +111,7 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:
 
     reply_markup: dict[str, object] | None = None
     if issue_id and issue_id != '(без ID)':
-        reply_markup = {
-            'inline_keyboard': [[{'text': 'Прийняти', 'callback_data': f'accept|{issue_id}'}]],
-        }
+        reply_markup = {'inline_keyboard': [[{'text': 'Прийняти', 'callback_data': f'accept|{issue_id}'}]]}
 
     logger.info('Підготовано повідомлення для задачі %s', issue_id or '(без ID)')
     await run_in_threadpool(send_message, message, reply_markup)
@@ -128,22 +120,20 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:
 
 @app.post('/telegram')
 async def telegram_webhook(request: Request) -> dict[str, bool]:
-    """Обробити callback від Telegram та призначити задачу у YouTrack.
+    """Обробляє callback від Telegram та призначає задачу у YouTrack.
 
-    Перевірити секрет вебхука, розібрати callback із кнопки «Прийняти»,
-    призначити задачу користувачу (й оновити стан) та відповісти в Telegram.
+    Перевіряє секрет вебхука, розбирає callback із кнопки «Прийняти»,
+    призначає задачу користувачу (й оновлює стан) та відповідає в Telegram.
 
     :param request: Запит FastAPI з callback-даними.
-    :type request: Request
     :returns: Словник ``{"ok": True}`` незалежно від результату обробки.
-    :rtype: dict[str, bool]
     :raises HTTPException: 403, якщо секрет Telegram не збігається.
     """
     logger.info('Отримано вебхук Telegram')
 
     verify_telegram_secret(request)
 
-    # Telegram надсилає JSON із даними оновлення
+    # Обробляють JSON із даними оновлення від Telegram
     payload: Any = await request.json()
     if not isinstance(payload, dict):
         logger.warning('Отримано некоректний payload від Telegram: %r', payload)
@@ -155,19 +145,19 @@ async def telegram_webhook(request: Request) -> dict[str, bool]:
         _handle_message_update(message_mapping)
         return {'ok': True}
 
-    # Спробувати побудувати структурований контекст callback
+    # Намагаються побудувати структурований контекст callback
     context: CallbackContext | None = parse_callback_payload(payload)
     if context is None:
         logger.debug('Не вдалося розібрати callback_payload: %s', payload)
         return {'ok': True}
 
-    # Пустити далі лише дозволених користувачів (якщо список заданий)
+    # Пропускають далі лише дозволених користувачів (якщо список заданий)
     if not is_user_allowed(context.tg_user_id):
         logger.warning('Користувач %s не має прав для прийняття задачі', context.tg_user_id)
         reply_insufficient_rights(context.callback_id)
         return {'ok': True}
 
-    # Payload має формат ``accept|ABC-1`` — отримання дії та ID
+    # Розбирають payload формату ``accept|ABC-1`` для отримання дії та ID
     action, issue_id = parse_action(context.payload)
     if action != 'accept' or not issue_id:
         logger.warning('Отримано невідому дію: action=%s payload=%s', action, context.payload)
@@ -183,12 +173,12 @@ async def telegram_webhook(request: Request) -> dict[str, bool]:
 
 @app.post('/telegram/webhook')
 async def telegram_webhook_alias(request: Request) -> dict[str, bool]:
-    """Проксувати запит на основний обробник ``/telegram`` (запасний маршрут)."""
+    """Переадресовує запит на основний обробник ``/telegram`` (запасний маршрут)."""
     return await telegram_webhook(request)
 
 
 def _handle_message_update(message: Mapping[str, object]) -> None:
-    """Обробити звичайне повідомлення Telegram (команди користувачів)."""
+    """Обробляє звичайне повідомлення Telegram (команди користувачів)."""
     chat_mapping: Mapping[str, object] | None = as_mapping(message.get('chat'))
     chat_id_obj: object | None = chat_mapping.get('id') if chat_mapping else None
     chat_id: int | None = chat_id_obj if isinstance(chat_id_obj, int) else None
@@ -220,7 +210,7 @@ def _handle_message_update(message: Mapping[str, object]) -> None:
 
 
 def handle_register_command(chat_id: int, message: Mapping[str, object], text: str) -> None:
-    """Обробити команду ``/register`` та зберегти дані користувача."""
+    """Обробляє команду ``/register`` та зберігає дані користувача."""
     parts: list[str] = text.split()
     if len(parts) < 2:
         _send_template(chat_id, Msg.ERR_REGISTER_FORMAT)
@@ -272,7 +262,7 @@ def handle_register_command(chat_id: int, message: Mapping[str, object], text: s
 
 
 def handle_confirm_login_command(chat_id: int, message: Mapping[str, object], text: str) -> None:
-    """Підтвердити зміну логіна на новий."""
+    """Підтверджує зміну логіна на новий."""
     parts: list[str] = text.split()
     if len(parts) < 2:
         _send_template(chat_id, Msg.ERR_CONFIRM_FORMAT)
@@ -303,12 +293,7 @@ def handle_confirm_login_command(chat_id: int, message: Mapping[str, object], te
         return
 
     if pending_details.requested_login.lower() != login.lower():
-        _send_template(
-            chat_id,
-            Msg.ERR_CONFIRM_MISMATCH,
-            expected=pending_details.requested_login,
-            actual=login,
-        )
+        _send_template(chat_id, Msg.ERR_CONFIRM_MISMATCH, expected=pending_details.requested_login, actual=login)
         return
 
     current_login, _, _ = resolve_from_map(tg_user_id)
@@ -332,7 +317,7 @@ def _complete_registration(
     *,
     previous_login: str | None = None,
 ) -> bool:
-    """Завершити реєстрацію користувача з підготовленими даними."""
+    """Завершує реєстрацію користувача з підготовленими даними."""
     try:
         upsert_user_map_entry(
             tg_user_id,
@@ -381,7 +366,7 @@ def _complete_registration(
 
 
 def _resolve_login_details(chat_id: int, login: str) -> PendingLoginChange | None:
-    """Отримати деталі облікового запису YouTrack для заданого логіна."""
+    """Отримує деталі облікового запису YouTrack для заданого логіна."""
     if not (YT_BASE_URL and YT_TOKEN):
         logger.error('Команда /register недоступна: не налаштовано YT_BASE_URL або YT_TOKEN')
         _send_template(chat_id, Msg.ERR_YT_NOT_CONFIGURED)
@@ -407,25 +392,18 @@ def _resolve_login_details(chat_id: int, login: str) -> PendingLoginChange | Non
 
 
 def _reply_text(chat_id: int, text: str) -> None:
-    """Надіслати просте текстове повідомлення у чат."""
-    call_api(
-        'sendMessage',
-        {
-            'chat_id': chat_id,
-            'text': text,
-            'disable_web_page_preview': True,
-        },
-    )
+    """Надсилає просте текстове повідомлення у чат."""
+    call_api('sendMessage', {'chat_id': chat_id, 'text': text, 'disable_web_page_preview': True})
 
 
 def _send_template(chat_id: int, msg: Msg, **params: object) -> None:
-    """Надіслати повідомлення за ключем локалізованого шаблону."""
+    """Надсилає повідомлення за ключем локалізованого шаблону."""
     text: str = render(msg, locale='uk', **params)
     _reply_text(chat_id, text)
 
 
 def main() -> None:
-    """Запустити Uvicorn сервер для FastAPI застосунку."""
+    """Запускає Uvicorn сервер для FastAPI застосунку."""
     uvicorn.run(app, host='0.0.0.0', port=8080)
 
 
