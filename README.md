@@ -1,12 +1,13 @@
 # Agromat IT Desk Bot
 
-**Agromat IT Desk Bot** – це невеликий сервіс на **FastAPI**, який приймає вебхуки з **YouTrack**, формує компактні повідомлення та публікує їх у **Telegram**. Інженер підтримки може натиснути кнопку «Прийняти», щоб призначити задачу на себе, а бот автоматично оновить статус у **YouTrack**.
+**Agromat IT Desk Bot** – це сервіс на **FastAPI** з інтегрованим **Aiogram v3**, який приймає вебхуки з **YouTrack**, трансформує їх у компактні повідомлення та публікує у **Telegram**. Інженер підтримки може натиснути кнопку «Прийняти», щоб призначити задачу на себе, а бот автоматично оновить статус у **YouTrack**.
 
 
 ## Можливості
 - Прийом вебхуків **YouTrack** (`POST /youtrack`) і побудова HTML-повідомлень з ID, заголовком, описом та посиланням.
 - Відправлення повідомлень у **Telegram** з інлайновою кнопкою «Прийняти».
-- Обробка callback-запитів **Telegram** (`POST /telegram`), перевірка прав і призначення задачі через **YouTrack REST API**.
+- Обробка оновлень **Telegram** (повідомлення + callback) через Aiogram роутер, делегування існуючій бізнес-логіці та перевірка прав користувачів.
+- Призначення задачі у **YouTrack** та опційне автоматичне оновлення стану через REST API.
 - Опціональне автоматичне оновлення статусу задачі (*наприклад, на «В роботі»*).
 - Гнучке логування ключових дій для спостереження та діагностики.
 
@@ -48,6 +49,7 @@
    curl -X POST "https://api.telegram.org/bot$BOT_TOKEN/setWebhook" \
         -d "url=https://<public-domain>/telegram" \
         -d "secret_token=$TELEGRAM_WEBHOOK_SECRET" \
+        -d "allowed_updates[]=message" \
         -d "allowed_updates[]=callback_query"
    ```
 7. **Налаштувати YouTrack workflow** (див. нижче).
@@ -60,7 +62,7 @@
 
 | Змінна | Призначення |
 | --- | --- |
-| `BOT_TOKEN` | Токен **Telegram-бота** |
+| `BOT_TOKEN` | Токен **Telegram-бота** (використовується для Aiogram Dispatcher) |
 | `TELEGRAM_CHAT_ID` | ID чату, куди надсилати повідомлення |
 | `TELEGRAM_WEBHOOK_SECRET` | Секретний токен для перевірки вебхука (*рекомендовано*) |
 | `ALLOWED_TG_USER_IDS` | Список дозволених **Telegram user ID** через кому |
@@ -132,6 +134,7 @@
   curl -X POST "https://api.telegram.org/bot$BOT_TOKEN/setWebhook" \
        -d "url=https://<public-domain>/telegram" \
        -d "secret_token=$TELEGRAM_WEBHOOK_SECRET" \
+       -d "allowed_updates[]=message" \
        -d "allowed_updates[]=callback_query"
   ```
 - **Очистити чергу** (*наприклад, після зміни домену*)
@@ -166,15 +169,30 @@
 | Статус не змінюється | Звірити `YOUTRACK_STATE_FIELD_NAME` і `YOUTRACK_STATE_IN_PROGRESS` з бандлом поля в **YouTrack**. |
 
 
-## Структура проєкту
+## Структура проєкту (з ключовими модулями)
 ```
 agromat_it_desk_bot/
-├─ main.py            # FastAPI, логіка повідомлень і призначень
-├─ config.py          # Зчитування змінних середовища
+├─ main.py             # FastAPI застосунок, вебхуки /youtrack та /telegram
+├─ telegram_aiogram.py # Router/Dispatcher Aiogram, обробка message + callback
+├─ telegram_commands.py# Бізнес-логіка команд /register та /confirm_login
+├─ callback_handlers.py# Призначення задач (кнопка «Прийняти»)
+├─ telegram_service.py # Синхронні виклики Telegram Bot API
+├─ utils.py            # Допоміжні функції, user_map, YouTrack форматування
 └─ ...
 webhooks/
-└─ yt2tg_webhook.js   # приклад workflow для YouTrack
-.env.example          # приклад налаштування середовища
-user_map.json.example # приклади відповідностей TG → YouTrack
-requirements.txt      # перелік залежностей
+└─ yt2tg_webhook.js    # приклад workflow для YouTrack
+.env.example           # приклад налаштування середовища
+user_map.json.example  # приклади відповідностей TG → YouTrack
+requirements.txt       # перелік залежностей
 ```
+
+## Тестування та перевірки
+Перед релізом рекомендується запускати повний цикл перевірок:
+```bash
+source .venv/bin/activate
+python -m pytest -q
+ruff check .
+mypy .
+python -m compileall -q .
+```
+Ці команди також інтегровані у CI-підхід проєкту, тому локальний запуск допомагає швидко виявити проблеми.

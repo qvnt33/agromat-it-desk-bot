@@ -217,7 +217,11 @@ def _extract_entry(mapping_value: Mapping[str, object]) -> UserMapEntry:
 
 
 def upsert_user_map_entry(
-    tg_user_id: int, *, login: str | None = None, email: str | None = None, yt_user_id: str | None = None
+    tg_user_id: int,
+    *,
+    login: str | None = None,
+    email: str | None = None,
+    yt_user_id: str | None = None,
 ) -> None:
     """Додає або оновлює запис користувача у ``user_map.json``."""
     if not any((login, email, yt_user_id)):

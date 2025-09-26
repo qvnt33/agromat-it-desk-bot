@@ -206,9 +206,26 @@ def find_state_value_id(field_data: CustomField, desired_state: str) -> str | No
     project_custom: Mapping[str, object] | dict[str, object] = as_mapping(field_data.get('projectCustomField')) or {}
     bundle: Mapping[str, object] | dict[str, object] = as_mapping(project_custom.get('bundle')) or {}
     values: list[dict[str, object]] = cast(list[dict[str, object]], bundle.get('values') or [])
-    # Перевіряють усі доступні значення стану та знаходять потрібне
+    desired_normalized: str = desired_state.strip().casefold()
+
+    def _extract_text(entry: object | None) -> str | None:
+        if isinstance(entry, str):
+            return entry
+        if isinstance(entry, Mapping):
+            text_obj: object | None = entry.get('text')
+            if isinstance(text_obj, str):
+                return text_obj
+        return None
+
     for value in values:
-        if value.get('name') == desired_state and isinstance(value.get('id'), str):
+        candidates: set[str] = set()
+        for key in ('name', 'localizedName', 'value', 'idReadable'):
+            raw: object | None = value.get(key)
+            extracted: str | None = _extract_text(raw)
+            if extracted:
+                candidates.add(extracted.strip().casefold())
+
+        if desired_normalized in candidates and isinstance(value.get('id'), str):
             return str(value['id'])
     return None
 
