@@ -1,0 +1,42 @@
+"""Містить україномовні шаблони повідомлень."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+
+from .keys import Msg
+
+# Зберігають сталі текстові шаблони для локалі ``uk``
+UK: Mapping[Msg, str] = {
+    # Інформаційні повідомлення
+    Msg.HELP_REGISTER: (
+        'Щоб додати себе до списку дозволених, надішліть команду\n'
+        '/register <логін>. Бот підставить решту даних автоматично.'
+    ),
+    Msg.REGISTER_ALREADY: (
+        'Ви вже зареєстровані як {login}.\n'
+        'Якщо потрібно змінити логін – надіслати /register {suggested}.'
+    ),
+    Msg.REGISTER_PROMPT_CONFIRM: 'Запит отримано. Підтвердити зміну: /confirm_login {login}',
+    Msg.REGISTER_SAVED: '✅ Дані збережено: {login} · {email} · {yt_id}',
+    Msg.REGISTER_UPDATED_NOTE: 'Логін оновлено з {previous} на {current}.',
+    Msg.CALLBACK_ACCEPTED: 'Прийнято ✅',
+
+    # Помилки та попередження
+    Msg.ERR_REGISTER_FORMAT: 'Формат команди: /register <логін>',
+    Msg.ERR_CONFIRM_FORMAT: 'Формат команди: /confirm_login <логін>',
+    Msg.ERR_TG_ID_UNAVAILABLE: 'Не вдалося визначити ваш Telegram ID. Спробуйте пізніше.',
+    Msg.ERR_LOGIN_TAKEN: 'Цей логін вже закріплено за іншим користувачем.',
+    Msg.ERR_CONFIRM_MISMATCH: 'Очікується підтвердження для логіна {expected}, а не {actual}.',
+    Msg.ERR_NO_PENDING: 'Немає запиту на підтвердження логіна для цього користувача.',
+    Msg.ERR_STORAGE: 'Сталася помилка при збереженні даних. Адміністратори вже в курсі.',
+    Msg.ERR_UNKNOWN: 'Сталася непередбачувана помилка. Спробуйте пізніше.',
+    Msg.ERR_YT_NOT_CONFIGURED: 'YouTrack інтеграція не налаштована. Зверніться до адміністратора.',
+    Msg.ERR_YT_TOKEN_MISSING: 'YouTrack токен не налаштовано. Зверніться до адміністратора.',
+    Msg.ERR_YT_FETCH: 'Не вдалося отримати дані з YouTrack. Спробуйте пізніше.',
+    Msg.ERR_YT_USER_NOT_FOUND: 'Користувача з таким логіном у YouTrack не знайдено.',
+    Msg.ERR_CALLBACK_RIGHTS: 'Недостатньо прав',
+    Msg.ERR_CALLBACK_UNKNOWN: 'Невідома дія',
+    Msg.ERR_CALLBACK_ASSIGN_FAILED: 'Не вдалося призначити',
+    Msg.ERR_CALLBACK_ASSIGN_ERROR: 'Помилка: не вдалось прийняти',
+}

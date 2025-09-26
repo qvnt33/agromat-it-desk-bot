@@ -31,6 +31,7 @@ from agromat_it_desk_bot.config import (
     YT_TOKEN,
     YT_WEBHOOK_SECRET,
 )
+from agromat_it_desk_bot.messages import Msg, render
 from agromat_it_desk_bot.telegram_service import call_api, send_message
 from agromat_it_desk_bot.utils import (
     as_mapping,
@@ -215,29 +216,25 @@ def _handle_message_update(message: Mapping[str, object]) -> None:
     elif normalized_text.startswith('/confirm_login'):
         handle_confirm_login_command(chat_id, message, normalized_text)
     elif normalized_text in {'/start', '/help'}:
-        _reply_text(
-            chat_id,
-            'Щоб додати себе до списку дозволених, надішліть команду\n'
-            '/register <логін>. Бот підставить решту даних автоматично.',
-        )
+        _send_template(chat_id, Msg.HELP_REGISTER)
 
 
 def handle_register_command(chat_id: int, message: Mapping[str, object], text: str) -> None:
     """Обробити команду ``/register`` та зберегти дані користувача."""
     parts: list[str] = text.split()
     if len(parts) < 2:
-        _reply_text(chat_id, 'Формат команди: /register <логін>')
+        _send_template(chat_id, Msg.ERR_REGISTER_FORMAT)
         return
 
     _, *args = parts
     login_candidate: str | None = args[0] if args else None
     if not login_candidate:
-        _reply_text(chat_id, 'Формат команди: /register <логін>')
+        _send_template(chat_id, Msg.ERR_REGISTER_FORMAT)
         return
 
     login: str = login_candidate.strip()
     if not login:
-        _reply_text(chat_id, 'Формат команди: /register <логін>')
+        _send_template(chat_id, Msg.ERR_REGISTER_FORMAT)
         return
 
     from_mapping: Mapping[str, object] | None = as_mapping(message.get('from'))
@@ -245,13 +242,13 @@ def handle_register_command(chat_id: int, message: Mapping[str, object], text: s
     tg_user_id: int | None = tg_user_obj if isinstance(tg_user_obj, int) else None
     if tg_user_id is None:
         logger.warning('Не вдалося визначити відправника для команди /register: %s', message)
-        _reply_text(chat_id, 'Не вдалося визначити ваш Telegram ID. Спробуйте пізніше.')
+        _send_template(chat_id, Msg.ERR_TG_ID_UNAVAILABLE)
         return
 
     current_login, _, _ = resolve_from_map(tg_user_id)
     if current_login and current_login.lower() == login.lower():
         pending_login_updates.pop(tg_user_id, None)
-        _reply_text(chat_id, f'Ви вже зареєстровані з логіном {current_login}.')
+        _send_template(chat_id, Msg.REGISTER_ALREADY, login=current_login, suggested=current_login)
         return
 
     details: PendingLoginChange | None = _resolve_login_details(chat_id, login)
@@ -262,17 +259,12 @@ def handle_register_command(chat_id: int, message: Mapping[str, object], text: s
     exclude_key: int | None = tg_user_id if current_login is not None else None
     if is_login_taken(details.resolved_login, exclude_tg_user_id=exclude_key):
         pending_login_updates.pop(tg_user_id, None)
-        _reply_text(chat_id, 'Цей логін вже закріплено за іншим користувачем.')
+        _send_template(chat_id, Msg.ERR_LOGIN_TAKEN)
         return
 
     if current_login and current_login.lower() != details.resolved_login.lower():
         pending_login_updates[tg_user_id] = details
-        _reply_text(
-            chat_id,
-            'Ваш поточний логін: '
-            f'{current_login}. Щоб змінити його на {details.requested_login}, підтвердіть командою\n'
-            f'/confirm_login {details.requested_login}',
-        )
+        _send_template(chat_id, Msg.REGISTER_PROMPT_CONFIRM, login=details.requested_login)
         return
 
     pending_login_updates.pop(tg_user_id, None)
@@ -283,18 +275,18 @@ def handle_confirm_login_command(chat_id: int, message: Mapping[str, object], te
     """Підтвердити зміну логіна на новий."""
     parts: list[str] = text.split()
     if len(parts) < 2:
-        _reply_text(chat_id, 'Формат команди: /confirm_login <логін>')
+        _send_template(chat_id, Msg.ERR_CONFIRM_FORMAT)
         return
 
     _, *args = parts
     login_candidate: str | None = args[0] if args else None
     if not login_candidate:
-        _reply_text(chat_id, 'Формат команди: /confirm_login <логін>')
+        _send_template(chat_id, Msg.ERR_CONFIRM_FORMAT)
         return
 
     login: str = login_candidate.strip()
     if not login:
-        _reply_text(chat_id, 'Формат команди: /confirm_login <логін>')
+        _send_template(chat_id, Msg.ERR_CONFIRM_FORMAT)
         return
 
     from_mapping: Mapping[str, object] | None = as_mapping(message.get('from'))
@@ -302,27 +294,32 @@ def handle_confirm_login_command(chat_id: int, message: Mapping[str, object], te
     tg_user_id: int | None = tg_user_obj if isinstance(tg_user_obj, int) else None
     if tg_user_id is None:
         logger.warning('Не вдалося визначити відправника для команди /confirm_login: %s', message)
-        _reply_text(chat_id, 'Не вдалося визначити ваш Telegram ID. Спробуйте пізніше.')
+        _send_template(chat_id, Msg.ERR_TG_ID_UNAVAILABLE)
         return
 
     pending_details: PendingLoginChange | None = pending_login_updates.get(tg_user_id)
     if pending_details is None:
-        _reply_text(chat_id, 'Немає запиту на зміну логіна. Спочатку використайте /register <логін>.')
+        _send_template(chat_id, Msg.ERR_NO_PENDING)
         return
 
     if pending_details.requested_login.lower() != login.lower():
-        _reply_text(chat_id, f'Очікується підтвердження для логіна {pending_details.requested_login}, а не {login}.')
+        _send_template(
+            chat_id,
+            Msg.ERR_CONFIRM_MISMATCH,
+            expected=pending_details.requested_login,
+            actual=login,
+        )
         return
 
     current_login, _, _ = resolve_from_map(tg_user_id)
     if current_login and current_login.lower() == pending_details.resolved_login.lower():
         pending_login_updates.pop(tg_user_id, None)
-        _reply_text(chat_id, f'Ви вже зареєстровані з логіном {current_login}.')
+        _send_template(chat_id, Msg.REGISTER_ALREADY, login=current_login, suggested=current_login)
         return
 
     if is_login_taken(pending_details.resolved_login, exclude_tg_user_id=tg_user_id):
         pending_login_updates.pop(tg_user_id, None)
-        _reply_text(chat_id, 'Цей логін вже закріплено за іншим користувачем.')
+        _send_template(chat_id, Msg.ERR_LOGIN_TAKEN)
         return
 
     _complete_registration(chat_id, tg_user_id, pending_details, previous_login=current_login)
@@ -349,11 +346,11 @@ def _complete_registration(
         return False
     except FileNotFoundError as err:
         logger.exception('Не вдалося створити user_map.json: %s', err)
-        _reply_text(chat_id, 'Сталася помилка при збереженні даних. Адміністратори вже в курсі.')
+        _send_template(chat_id, Msg.ERR_STORAGE)
         return False
     except Exception as err:  # noqa: BLE001
         logger.exception('Помилка при оновленні user_map для %s: %s', tg_user_id, err)
-        _reply_text(chat_id, 'Сталася непередбачувана помилка. Спробуйте пізніше.')
+        _send_template(chat_id, Msg.ERR_UNKNOWN)
         return False
 
     pending_login_updates.pop(tg_user_id, None)
@@ -365,19 +362,21 @@ def _complete_registration(
         details.yt_user_id,
     )
 
-    message_suffix: str = (
-        f' Логін у YouTrack: {details.resolved_login}.'
-        if details.resolved_login
-        else ''
+    base_text: str = render(
+        Msg.REGISTER_SAVED,
+        login=details.resolved_login,
+        email=details.email or '-',
+        yt_id=details.yt_user_id,
     )
     extra_line: str = ''
     if previous_login and previous_login.lower() != details.resolved_login.lower():
-        extra_line = f'\nЛогін оновлено з {previous_login} на {details.resolved_login}.'
+        extra_line = '\n' + render(
+            Msg.REGISTER_UPDATED_NOTE,
+            previous=previous_login,
+            current=details.resolved_login,
+        )
 
-    _reply_text(
-        chat_id,
-        f'✅ Дані збережено. Тепер ви можете натискати кнопку «Прийняти».{message_suffix}{extra_line}',
-    )
+    _reply_text(chat_id, base_text + extra_line)
     return True
 
 
@@ -385,22 +384,22 @@ def _resolve_login_details(chat_id: int, login: str) -> PendingLoginChange | Non
     """Отримати деталі облікового запису YouTrack для заданого логіна."""
     if not (YT_BASE_URL and YT_TOKEN):
         logger.error('Команда /register недоступна: не налаштовано YT_BASE_URL або YT_TOKEN')
-        _reply_text(chat_id, 'YouTrack інтеграція не налаштована. Зверніться до адміністратора.')
+        _send_template(chat_id, Msg.ERR_YT_NOT_CONFIGURED)
         return None
 
     try:
         resolved_login, email, yt_user_id = lookup_user_by_login(login)
     except AssertionError:
         logger.exception('Не налаштовано токен YouTrack для пошуку користувача')
-        _reply_text(chat_id, 'YouTrack токен не налаштовано. Зверніться до адміністратора.')
+        _send_template(chat_id, Msg.ERR_YT_TOKEN_MISSING)
         return None
     except Exception as err:  # noqa: BLE001
         logger.exception('Помилка пошуку користувача YouTrack за логіном %s: %s', login, err)
-        _reply_text(chat_id, 'Не вдалося отримати дані з YouTrack. Спробуйте пізніше.')
+        _send_template(chat_id, Msg.ERR_YT_FETCH)
         return None
 
     if yt_user_id is None:
-        _reply_text(chat_id, 'Користувача з таким логіном у YouTrack не знайдено.')
+        _send_template(chat_id, Msg.ERR_YT_USER_NOT_FOUND)
         return None
 
     resolved: str = resolved_login or login
@@ -417,6 +416,12 @@ def _reply_text(chat_id: int, text: str) -> None:
             'disable_web_page_preview': True,
         },
     )
+
+
+def _send_template(chat_id: int, msg: Msg, **params: object) -> None:
+    """Надіслати повідомлення за ключем локалізованого шаблону."""
+    text: str = render(msg, locale='uk', **params)
+    _reply_text(chat_id, text)
 
 
 def main() -> None:

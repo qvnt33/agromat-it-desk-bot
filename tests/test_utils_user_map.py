@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from agromat_it_desk_bot import utils
+from agromat_it_desk_bot.messages import Msg, render
 
 
 @pytest.fixture()
 def tmp_user_map(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path: Path = tmp_path / 'user_map.json'
+    # Переспрямовують шляхи на тимчасовий user_map для тесту
     monkeypatch.setattr(utils, 'USER_MAP_FILE', path)
     return path
 
@@ -33,7 +36,9 @@ def test_upsert_user_map_entry_blocks_duplicate_login(tmp_user_map: Path) -> Non
     data: dict[str, dict[str, str]] = {'100': {'login': 'support', 'id': 'YT-1'}}
     tmp_user_map.write_text(json.dumps(data, ensure_ascii=False))
 
-    with pytest.raises(ValueError, match='логін вже закріплено'):
+    expected_message: str = render(Msg.ERR_LOGIN_TAKEN)
+
+    with pytest.raises(ValueError, match=re.escape(expected_message)):
         utils.upsert_user_map_entry(200, login='support')
 
 

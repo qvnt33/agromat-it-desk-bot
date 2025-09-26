@@ -13,6 +13,7 @@ from agromat_it_desk_bot.main import (
     handle_register_command,
     pending_login_updates,
 )
+from agromat_it_desk_bot.messages import Msg, render
 
 SentMessages = list[dict[str, object]]
 
@@ -20,6 +21,7 @@ SentMessages = list[dict[str, object]]
 @pytest.fixture(autouse=True)
 def clear_state(monkeypatch: pytest.MonkeyPatch) -> SentMessages:
     """Очистити глобальний стан та перехопити вихідні повідомлення."""
+    # Ініціалізують буфер для відправлених повідомлень
     pending_login_updates.clear()
     sent_messages: SentMessages = []
 
@@ -46,6 +48,7 @@ def patch_resolve_from_map(
     result: tuple[str | None, str | None, str | None],
 ) -> None:
     """Встановити кастомний resolver для resolve_from_map."""
+    # Підміняють пошук запису user_map за Telegram ID
 
     def resolver(_: int) -> tuple[str | None, str | None, str | None]:
         return result
@@ -55,6 +58,7 @@ def patch_resolve_from_map(
 
 def patch_is_login_taken(monkeypatch: pytest.MonkeyPatch, value: bool) -> None:
     """Переоприділити ``is_login_taken`` з фіксованим результатом."""
+    # Форсують наперед визначену відповідь щодо зайнятості логіна
 
     def checker(login: str, *, exclude_tg_user_id: int | None = None) -> bool:  # noqa: ARG001
         return value
@@ -74,9 +78,11 @@ def patch_resolve_login_details(
         if details is None and failure_message is not None:
             main_module.call_api(
                 'sendMessage',
-                {'chat_id': chat_id,
-                 'text': failure_message,
-                 'disable_web_page_preview': True},
+                {
+                    'chat_id': chat_id,
+                    'text': failure_message,
+                    'disable_web_page_preview': True,
+                },
             )
             return None
         return details
@@ -98,7 +104,8 @@ def test_register_same_login_returns_notice(
     last_message: dict[str, object] = clear_state[-1]
     payload: dict[str, object] = last_message['payload']  # type: ignore[assignment]
     text: str = payload['text']  # type: ignore[assignment]
-    assert text.startswith('Ви вже зареєстровані')
+    expected: str = render(Msg.REGISTER_ALREADY, login='existing', suggested='existing')
+    assert text == expected
 
 
 def test_register_new_login_requires_confirmation(
@@ -119,7 +126,8 @@ def test_register_new_login_requires_confirmation(
     last_message: dict[str, object] = clear_state[-1]
     payload: object = last_message['payload']  # type: ignore[assignment]
     text: Any = payload['text']  # type: ignore[assignment]
-    assert '/confirm_login newlogin' in text
+    expected: str = render(Msg.REGISTER_PROMPT_CONFIRM, login='newlogin')
+    assert text == expected
 
 
 def test_register_fails_when_login_unknown(
@@ -131,7 +139,7 @@ def test_register_fails_when_login_unknown(
     patch_resolve_login_details(
         monkeypatch,
         None,
-        failure_message='Користувача з таким логіном у YouTrack не знайдено.',
+        failure_message=render(Msg.ERR_YT_USER_NOT_FOUND),
     )
 
     message: dict[str, object] = build_message(333, '/register ghost')
@@ -141,7 +149,8 @@ def test_register_fails_when_login_unknown(
     last_message: dict[str, object] = clear_state[-1]
     payload: object = last_message['payload']  # type: ignore[assignment]
     text: Any = payload['text']  # type: ignore[assignment]
-    assert text == 'Користувача з таким логіном у YouTrack не знайдено.'
+    expected: str = render(Msg.ERR_YT_USER_NOT_FOUND)
+    assert text == expected
 
 
 def test_register_new_login_creates_entry(
@@ -176,7 +185,13 @@ def test_register_new_login_creates_entry(
     last_message: dict[str, object] = clear_state[-1]
     payload: object = last_message['payload']  # type: ignore[assignment]
     text = payload['text']  # type: ignore[assignment]
-    assert '✅ Дані збережено' in text
+    expected_text: str = render(
+        Msg.REGISTER_SAVED,
+        login='fresh',
+        email='fresh@example.com',
+        yt_id='YT-3',
+    )
+    assert text == expected_text
 
 
 def test_confirm_login_success(
@@ -211,7 +226,18 @@ def test_confirm_login_success(
     last_message: dict[str, object] = clear_state[-1]
     payload: object = last_message['payload']  # type: ignore[assignment]
     text = payload['text']  # type: ignore[assignment]
-    assert text.startswith('✅ Дані збережено')  # type: ignore
+    expected_base: str = render(
+        Msg.REGISTER_SAVED,
+        login='target',
+        email='user@example.com',
+        yt_id='YT-5',
+    )
+    expected_note: str = render(
+        Msg.REGISTER_UPDATED_NOTE,
+        previous='old',
+        current='target',
+    )
+    assert text == f'{expected_base}\n{expected_note}'
 
 
 def test_confirm_login_rejects_foreign_login(
@@ -232,4 +258,5 @@ def test_confirm_login_rejects_foreign_login(
     last_message: dict[str, object] = clear_state[-1]
     payload: object = last_message['payload']  # type: ignore[assignment]
     text: Any = payload['text']  # type: ignore[assignment]
-    assert text == 'Цей логін вже закріплено за іншим користувачем.'
+    expected: str = render(Msg.ERR_LOGIN_TAKEN)
+    assert text == expected
