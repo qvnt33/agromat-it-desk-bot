@@ -20,8 +20,15 @@ import agromat_it_desk_bot.telegram_aiogram as telegram_aiogram
 import agromat_it_desk_bot.telegram_commands as telegram_commands
 from agromat_it_desk_bot.callback_handlers import verify_telegram_secret
 from agromat_it_desk_bot.config import YT_BASE_URL, YT_WEBHOOK_SECRET
+from agromat_it_desk_bot.messages import Msg, render
 from agromat_it_desk_bot.telegram_service import send_message
-from agromat_it_desk_bot.utils import configure_logging, extract_issue_id, format_message, get_str
+from agromat_it_desk_bot.utils import (
+    ISSUE_ID_UNKNOWN,
+    configure_logging,
+    extract_issue_id,
+    format_message,
+    get_str,
+)
 
 configure_logging()
 logger: logging.Logger = logging.getLogger(__name__)
@@ -46,7 +53,8 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:
     """
     payload: Any = await request.json()
     if not isinstance(payload, dict):
-        raise HTTPException(status_code=400, detail='Invalid payload shape')
+        # Захищаються від некоректного JSON
+        raise HTTPException(status_code=400, detail=render(Msg.HTTP_INVALID_PAYLOAD))
 
     data: dict[str, object] = cast(dict[str, object], payload)
 
@@ -54,8 +62,9 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:
         auth_header: str | None = request.headers.get('Authorization')
         expected: str = f'Bearer {YT_WEBHOOK_SECRET}'
         if auth_header != expected:
+            # Фіксують спробу використати чужий секрет
             logger.warning('Невірний секрет YouTrack вебхука')
-            raise HTTPException(status_code=403, detail='Forbidden')
+            raise HTTPException(status_code=403, detail=render(Msg.HTTP_FORBIDDEN))
 
     logger.debug('Отримано вебхук YouTrack: %s', data)
 
@@ -70,18 +79,26 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:
 
     url_val: str | None = None
     url_field: object | None = issue.get('url')
+    issue_unknown: str = ISSUE_ID_UNKNOWN
     if isinstance(url_field, str) and url_field:
+        # Використовують посилання з вебхука
         url_val = url_field
-    elif issue_id and issue_id != '(без ID)' and YT_BASE_URL:
+    elif issue_id and issue_id != issue_unknown and YT_BASE_URL:
+        # Формують посилання на задачу в YouTrack за замовчуванням
         url_val = f'{YT_BASE_URL}/issue/{issue_id}'
 
     message: str = format_message(issue_id, summary, description, url_val)
 
     reply_markup: dict[str, object] | None = None
-    if issue_id and issue_id != '(без ID)':
-        reply_markup = {'inline_keyboard': [[{'text': 'Прийняти', 'callback_data': f'accept|{issue_id}'}]]}
+    if issue_id and issue_id != issue_unknown:
+        button_text: str = render(Msg.CALLBACK_ACCEPT_BUTTON)
+        reply_markup = {
+            # Прикріплюють кнопку прийняття задачі з ідентифікатором
+            'inline_keyboard': [[{'text': button_text, 'callback_data': f'accept|{issue_id}'}]],
+        }
 
-    logger.info('Підготовано повідомлення для задачі %s', issue_id or '(без ID)')
+    issue_label: str = issue_id if issue_id and issue_id != issue_unknown else issue_unknown
+    logger.info('Підготовано повідомлення для задачі %s', issue_label)
     await run_in_threadpool(send_message, message, reply_markup)
     return {'ok': True}
 
@@ -93,11 +110,14 @@ async def telegram_webhook(request: Request) -> dict[str, bool]:
     verify_telegram_secret(request)
     payload: Any = await request.json()
     if not isinstance(payload, dict):
+        # Ігнорують невідомі оновлення, щоб не зривати роботу бота
         logger.warning('Отримано некоректний payload від Telegram: %r', payload)
         return {'ok': True}
     try:
-        await telegram_aiogram.process_update(payload)
+        # Передають оновлення у диспетчер Aiogram для маршрутизації
+        await telegram_aiogram.process_update(payload)  # type: ignore
     except Exception as err:  # noqa: BLE001
+        # Фіксують помилку, але не відповідають користувачу повторно
         logger.exception('Помилка обробки Telegram update: %s', err)
     return {'ok': True}
 

@@ -11,8 +11,11 @@ from pathlib import Path
 from typing import Any, TypedDict, cast
 
 from agromat_it_desk_bot.config import DESCRIPTION_MAX_LEN, USER_MAP_FILE
+from agromat_it_desk_bot.messages import Msg, render
 
 logger: logging.Logger = logging.getLogger(__name__)
+# Заздалегідь готують локалізований маркер для невідомого ID задачі
+ISSUE_ID_UNKNOWN: str = render(Msg.UTILS_ISSUE_NO_ID)
 
 
 class UserMapEntry(TypedDict, total=False):
@@ -30,6 +33,7 @@ def configure_logging(config_path: Path | None = None) -> None:
     """Завантажує конфіг логування з ``logging.conf`` або застосовує дефолт."""
     target_path: Path = config_path if config_path is not None else Path(__file__).resolve().parents[1] / 'logging.conf'
     try:
+        # Зчитують налаштування логування з файлу
         with target_path.open('r', encoding='utf-8') as config_file:
             config_data: dict[str, Any] = json.load(config_file)
     except FileNotFoundError:
@@ -71,9 +75,10 @@ def extract_issue_id(issue: Mapping[str, object]) -> str:
             project_short = name
 
     if project_short is not None and isinstance(number, (str, int)):
+        # Формують читабельний ідентифікатор за шаблоном PROJECT-N
         return f'{project_short}-{number}'
 
-    return '(без ID)'
+    return ISSUE_ID_UNKNOWN
 
 
 def format_message(issue_id: str, summary_raw: str, description_raw: str, url: str | None) -> str:
@@ -145,6 +150,7 @@ def _resolve_map_path() -> Path | None:
         candidate: Path = target_file / 'user_map.json'
         logger.debug('USER_MAP_FILE визначено як директорія, використовую %s', candidate)
         return candidate
+    # Працюють безпосередньо з файлом, якщо вказано шлях до нього
     logger.debug('USER_MAP_FILE використовується напряму: %s', target_file)
     return target_file
 
@@ -153,6 +159,7 @@ def _load_mapping(path: Path) -> UserMap:
     """Завантажує JSON-дані з файлу мапи користувачів."""
     raw_text: str = path.read_text(encoding='utf-8')
     if not raw_text.strip():
+        # Інформують про порожній файл і повертають порожню мапу
         logger.warning('USER_MAP_FILE %s порожній, використовую порожню мапу', path)
         return {}
 
@@ -163,14 +170,17 @@ def _load_mapping(path: Path) -> UserMap:
         return {}
 
     if not isinstance(raw_data, dict):
+        # Захищаються від непідтримуваного формату user_map
         logger.error('USER_MAP_FILE має некоректний формат (очікувався dict)')
         return {}
 
     result: UserMap = {}
     typed_data: dict[object, object] = cast(dict[object, object], raw_data)
+    # Обходять кожен запис user_map, нормалізуючи формат
 
     for key_obj, value in typed_data.items():
         if not isinstance(key_obj, str):
+            # Пропускають запис із некоректним типом ключа
             logger.debug('Пропускаю запис user_map із некоректним ключем: %r', key_obj)
             continue
 
@@ -225,9 +235,9 @@ def upsert_user_map_entry(
 ) -> None:
     """Додає або оновлює запис користувача у ``user_map.json``."""
     if not any((login, email, yt_user_id)):
-        msg = 'Потрібно надати принаймні одне з полів: login, email або yt_user_id'
-        logger.error('Не вдалося оновити мапу користувачів: %s', msg)
-        raise ValueError(msg)
+        message_required: str = render(Msg.ERR_USER_MAP_INPUT_REQUIRED)
+        logger.error('Не вдалося оновити мапу користувачів: %s', message_required)
+        raise ValueError(message_required)
 
     path: Path | None = _resolve_map_path()
     if path is None:
@@ -248,9 +258,9 @@ def upsert_user_map_entry(
         entry['id'] = yt_user_id
 
     if not entry:
-        msg = 'Надано порожні дані для оновлення мапи користувачів'
-        logger.error(msg)
-        raise ValueError(msg)
+        message_empty: str = render(Msg.ERR_USER_MAP_EMPTY)
+        logger.error(message_empty)
+        raise ValueError(message_empty)
 
     mapping[str(tg_user_id)] = entry
     _write_mapping(path, mapping)
@@ -318,9 +328,11 @@ def _ensure_unique_mapping(mapping: UserMap, tg_user_id: int, *, login: str | No
             existing_login = raw_entry
 
         if login_normalized and existing_login and existing_login.lower() == login_normalized:
+            # Блокують дублювання логіна між різними користувачами
             logger.warning('Логін %s вже закріплено за користувачем %s', login, existing_key)
-            raise ValueError('Цей логін вже закріплено за іншим користувачем.')
+            raise ValueError(render(Msg.ERR_LOGIN_TAKEN))
 
         if yt_user_id and existing_yt_id and existing_yt_id == yt_user_id:
+            # Не дозволяють повторно привʼязати той самий YouTrack акаунт
             logger.warning('YouTrack ID %s вже закріплено за користувачем %s', yt_user_id, existing_key)
-            raise ValueError('Цей YouTrack акаунт вже привʼязаний до іншого користувача.')
+            raise ValueError(render(Msg.ERR_USER_MAP_YT_TAKEN))

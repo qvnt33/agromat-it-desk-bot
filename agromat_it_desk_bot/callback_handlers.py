@@ -9,6 +9,7 @@ from typing import Any, NamedTuple
 from fastapi import HTTPException, Request
 
 from agromat_it_desk_bot.config import ALLOWED_TG_USER_IDS, TELEGRAM_WEBHOOK_SECRET, YOUTRACK_STATE_IN_PROGRESS
+from agromat_it_desk_bot.messages import Msg, render
 from agromat_it_desk_bot.telegram_service import call_api
 from agromat_it_desk_bot.utils import as_mapping
 from agromat_it_desk_bot.youtrack_service import assign_issue, resolve_account, set_state
@@ -36,7 +37,7 @@ def verify_telegram_secret(request: Request) -> None:
         secret: str | None = request.headers.get('X-Telegram-Bot-Api-Secret-Token')
         if secret != TELEGRAM_WEBHOOK_SECRET:
             logger.warning('Невірний секрет Telegram вебхука')
-            raise HTTPException(status_code=403, detail='Forbidden')
+            raise HTTPException(status_code=403, detail=render(Msg.HTTP_FORBIDDEN))
 
 
 def parse_callback_payload(payload: Any) -> CallbackContext | None:
@@ -50,11 +51,13 @@ def parse_callback_payload(payload: Any) -> CallbackContext | None:
         return None
 
     callback_id_obj: object | None = callback.get('id')
+    # Зберігають ідентифікатор callback для відповіді
     callback_id: str | None = str(callback_id_obj) if isinstance(callback_id_obj, (str, int)) else None
 
     from_user_mapping: Mapping[str, object] | None = as_mapping(callback.get('from'))
     tg_user_id: int | None = None
     if from_user_mapping is not None:
+        # Дістають Telegram ID користувача з оновлення
         tg_user_id_obj: object | None = from_user_mapping.get('id')
         if isinstance(tg_user_id_obj, int):
             tg_user_id = tg_user_id_obj
@@ -70,6 +73,7 @@ def parse_callback_payload(payload: Any) -> CallbackContext | None:
                 chat_id = chat_id_obj
 
         message_id_obj: object | None = message_mapping.get('message_id')
+        # Запамʼятовують оригінальне повідомлення для редагування клавіатури
         if isinstance(message_id_obj, int):
             message_id = message_id_obj
 
@@ -122,13 +126,16 @@ def handle_accept(issue_id: str, context: CallbackContext) -> None:
         login: str | None
         email: str | None
         yt_user_id: str | None
+        # Шукають дані користувача, що натиснув кнопку
         login, email, yt_user_id = resolve_account(context.tg_user_id)
         if not any((login, email, yt_user_id)):
             raise RuntimeError('Не знайдено мапінг користувача')
 
+        # Пробують призначити задачу на знайденого користувача
         assigned: bool = assign_issue(issue_id, login, email, yt_user_id)
         if assigned:
             if YOUTRACK_STATE_IN_PROGRESS:
+                # Оновлюють стан задачі після успішного призначення
                 set_state(issue_id, YOUTRACK_STATE_IN_PROGRESS)
 
             reply_success(context.callback_id)
@@ -136,28 +143,44 @@ def handle_accept(issue_id: str, context: CallbackContext) -> None:
         else:
             reply_assign_failed(context.callback_id)
     except Exception as exc:  # noqa: BLE001
+        # Логують усі внутрішні помилки, щоб розробники могли дослідити
         logger.exception('Не вдалося обробити прийняття: %s', exc)
         reply_assign_error(context.callback_id)
 
 
 def reply_insufficient_rights(callback_id: str) -> None:
     """Повідомляє про відсутність прав у користувача."""
-    call_api('answerCallbackQuery', {'callback_query_id': callback_id, 'text': 'Недостатньо прав', 'show_alert': True})
+    payload: dict[str, object] = {
+        'callback_query_id': callback_id,
+        'text': render(Msg.ERR_CALLBACK_RIGHTS),
+        'show_alert': True,
+    }
+    call_api('answerCallbackQuery', payload)
 
 
 def reply_unknown_action(callback_id: str) -> None:
     """Відповідає на невідому дію callback-даних."""
-    call_api('answerCallbackQuery', {'callback_query_id': callback_id, 'text': 'Невідома дія'})
+    call_api(
+        'answerCallbackQuery',
+        {'callback_query_id': callback_id, 'text': render(Msg.ERR_CALLBACK_UNKNOWN)},
+    )
 
 
 def reply_success(callback_id: str) -> None:
     """Підтверджує користувачу успішне призначення."""
-    call_api('answerCallbackQuery', {'callback_query_id': callback_id, 'text': 'Прийнято ✅'})
+    call_api(
+        'answerCallbackQuery',
+        {'callback_query_id': callback_id, 'text': render(Msg.CALLBACK_ACCEPTED)},
+    )
 
 
 def reply_assign_failed(callback_id: str) -> None:
     """Повідомляє про невдалу спробу призначення."""
-    payload: dict[str, object] = {'callback_query_id': callback_id, 'text': 'Не вдалося призначити', 'show_alert': True}
+    payload: dict[str, object] = {
+        'callback_query_id': callback_id,
+        'text': render(Msg.ERR_CALLBACK_ASSIGN_FAILED),
+        'show_alert': True,
+    }
     call_api('answerCallbackQuery', payload)
 
 
@@ -165,7 +188,7 @@ def reply_assign_error(callback_id: str) -> None:
     """Показує системну помилку під час прийняття."""
     payload: dict[str, object] = {
         'callback_query_id': callback_id,
-        'text': 'Помилка: не вдалось прийняти',
+        'text': render(Msg.ERR_CALLBACK_ASSIGN_ERROR),
         'show_alert': True,
     }
     call_api('answerCallbackQuery', payload)

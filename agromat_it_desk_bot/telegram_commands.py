@@ -46,6 +46,7 @@ def handle_register_command(chat_id: int, message: Mapping[str, object], text: s
         return
 
     from_mapping: Mapping[str, object] | None = as_mapping(message.get('from'))
+    # Беруть ідентифікатор користувача з метаданих повідомлення
     tg_user_obj: object | None = from_mapping.get('id') if from_mapping else None
     tg_user_id: int | None = tg_user_obj if isinstance(tg_user_obj, int) else None
     if tg_user_id is None:
@@ -61,6 +62,7 @@ def handle_register_command(chat_id: int, message: Mapping[str, object], text: s
 
     details: PendingLoginChange | None = _resolve_login_details(chat_id, login)
     if details is None:
+        # Очищають буфер, якщо дані не отримано
         pending_login_updates.pop(tg_user_id, None)
         return
 
@@ -71,6 +73,7 @@ def handle_register_command(chat_id: int, message: Mapping[str, object], text: s
         return
 
     if current_login and current_login.lower() != details.resolved_login.lower():
+        # Зберігають зміну для підтвердження користувачем
         pending_login_updates[tg_user_id] = details
         _send_template(chat_id, Msg.REGISTER_PROMPT_CONFIRM, login=details.requested_login)
         return
@@ -98,6 +101,7 @@ def handle_confirm_login_command(chat_id: int, message: Mapping[str, object], te
         return
 
     from_mapping: Mapping[str, object] | None = as_mapping(message.get('from'))
+    # Захищаються від підміни чату під час підтвердження
     tg_user_obj: object | None = from_mapping.get('id') if from_mapping else None
     tg_user_id: int | None = tg_user_obj if isinstance(tg_user_obj, int) else None
     if tg_user_id is None:
@@ -111,6 +115,7 @@ def handle_confirm_login_command(chat_id: int, message: Mapping[str, object], te
         return
 
     if pending_details.requested_login.lower() != login.lower():
+        # Повідомляють про спробу підтвердити інший логін
         _send_template(chat_id, Msg.ERR_CONFIRM_MISMATCH, expected=pending_details.requested_login, actual=login)
         return
 
@@ -149,14 +154,16 @@ def _complete_registration(
             yt_user_id=details.yt_user_id,
         )
     except ValueError as err:
-        friendly_error: str = str(err) or 'Не вдалося зберегти дані.'
+        friendly_error: str = str(err) or render(Msg.ERR_STORAGE_GENERIC)
         _reply_text(chat_id, friendly_error)
         return False
     except FileNotFoundError as err:
+        # Сховище користувачів недоступне, фіксують помилку для DevOps
         logger.exception('Не вдалося створити user_map.json: %s', err)
         _send_template(chat_id, Msg.ERR_STORAGE)
         return False
     except Exception as err:  # noqa: BLE001
+        # Логують причину, щоб не втратити інформацію про часткову невдачу
         logger.exception('Помилка при оновленні user_map для %s: %s', tg_user_id, err)
         _send_template(chat_id, Msg.ERR_UNKNOWN)
         return False
@@ -187,6 +194,7 @@ def _complete_registration(
 def _resolve_login_details(chat_id: int, login: str) -> PendingLoginChange | None:
     """Отримує деталі облікового запису YouTrack для заданого логіна."""
     if not (YT_BASE_URL and YT_TOKEN):
+        # Неможливо звернутися до YouTrack без базових параметрів
         logger.error('Команда /register недоступна: не налаштовано YT_BASE_URL або YT_TOKEN')
         _send_template(chat_id, Msg.ERR_YT_NOT_CONFIGURED)
         return None
@@ -194,15 +202,18 @@ def _resolve_login_details(chat_id: int, login: str) -> PendingLoginChange | Non
     try:
         resolved_login, email, yt_user_id = lookup_user_by_login(login)
     except AssertionError:
+        # Бібліотека YouTrack сигналізує про відсутність токена
         logger.exception('Не налаштовано токен YouTrack для пошуку користувача')
         _send_template(chat_id, Msg.ERR_YT_TOKEN_MISSING)
         return None
     except Exception as err:  # noqa: BLE001
+        # Обробляють несподівані помилки мережі або API
         logger.exception('Помилка пошуку користувача YouTrack за логіном %s: %s', login, err)
         _send_template(chat_id, Msg.ERR_YT_FETCH)
         return None
 
     if yt_user_id is None:
+        # Повідомляють, що користувача з таким логіном не існує
         _send_template(chat_id, Msg.ERR_YT_USER_NOT_FOUND)
         return None
 
@@ -212,11 +223,13 @@ def _resolve_login_details(chat_id: int, login: str) -> PendingLoginChange | Non
 
 def _reply_text(chat_id: int, text: str) -> None:
     """Надсилає просте текстове повідомлення у чат."""
+    # Відправляють повідомлення без додаткових плейсхолдерів
     payload: dict[str, object] = {'chat_id': chat_id, 'text': text, 'disable_web_page_preview': True}
     call_api('sendMessage', payload)
 
 
 def _send_template(chat_id: int, msg: Msg, **params: object) -> None:
     """Надсилає повідомлення за ключем локалізованого шаблону."""
+    # Рендерять шаблон локалізації та використовують загальну утиліту відправлення
     text: str = render(msg, locale='uk', **params)
     _reply_text(chat_id, text)

@@ -18,6 +18,17 @@ class Msg(str, Enum):
     REGISTER_SAVED = 'register.saved'
     REGISTER_UPDATED_NOTE = 'register.updated_note'
     CALLBACK_ACCEPTED = 'callback.accepted'
+    CALLBACK_ACCEPT_BUTTON = 'callback.accept_button'
+    UTILS_ISSUE_NO_ID = 'utils.issue_no_id'
+
+    # HTTP відповіді
+    HTTP_INVALID_PAYLOAD = 'http.invalid_payload'
+    HTTP_FORBIDDEN = 'http.forbidden'
+
+    # Telegram служби
+    ERR_TELEGRAM_CREDENTIALS = 'err.telegram_credentials'
+    ERR_TELEGRAM_TOKEN = 'err.telegram_token'
+    ERR_TELEGRAM_API = 'err.telegram_api'
 
     # Групують помилки та попередження
     ERR_REGISTER_FORMAT = 'err.register_format'
@@ -36,3 +47,7 @@ class Msg(str, Enum):
     ERR_CALLBACK_UNKNOWN = 'err.callback_unknown'
     ERR_CALLBACK_ASSIGN_FAILED = 'err.callback_assign_failed'
     ERR_CALLBACK_ASSIGN_ERROR = 'err.callback_assign_error'
+    ERR_STORAGE_GENERIC = 'err.storage_generic'
+    ERR_USER_MAP_INPUT_REQUIRED = 'err.user_map_input_required'
+    ERR_USER_MAP_EMPTY = 'err.user_map_empty'
+    ERR_USER_MAP_YT_TAKEN = 'err.user_map_yt_taken'
