@@ -29,9 +29,10 @@ UserMap = dict[str, UserMapEntry | str]
 
 def configure_logging(config_path: Path | None = None) -> None:
     """Завантажує конфіг логування з ``logging.conf`` або застосовує дефолт."""
+    # Шлях до файлу конфігурації логування
     target_path: Path = config_path if config_path is not None else Path(__file__).resolve().parents[1] / 'logging.conf'
     try:
-        # Зчитують налаштування логування з файлу
+        # Зчитування налаштувань логування
         with target_path.open('r', encoding='utf-8') as config_file:
             config_data: dict[str, Any] = json.load(config_file)
     except FileNotFoundError:
@@ -55,12 +56,13 @@ def get_str(source: Mapping[str, object], key: str) -> str:
 def extract_issue_id(issue: Mapping[str, object]) -> str:
     """Отримує читабельний ID задачі з доступних полів або формує його."""
     identifier: str = get_str(issue, 'idReadable') or get_str(issue, 'id')
-    if len(identifier) != 0:
+    if identifier:
         return identifier
 
-    number: object | None = issue.get('numberInProject')
-    project_raw: object | None = issue.get('project')
-    project_short: str | None = None
+    number: object | None = issue.get('numberInProject')  # Номер задачі в межах проєкту
+    project_raw: object | None = issue.get('project')  # Сирі дані проєкту з вебхука
+    project_short: str | None = None  # Скорочена назва проєкту
+
     project_mapping: Mapping[str, object] | None = as_mapping(project_raw)
 
     if project_mapping is not None:
@@ -74,7 +76,7 @@ def extract_issue_id(issue: Mapping[str, object]) -> str:
             project_short = name
 
     if project_short is not None and isinstance(number, (str, int)):
-        # Формують читабельний ідентифікатор за шаблоном PROJECT-N
+        # Формування читабельного ідентифікатора PROJECT-N
         return f'{project_short}-{number}'
 
     issue_id_unknown_msg: str = render(Msg.UTILS_ISSUE_NO_ID)
@@ -87,6 +89,7 @@ def format_telegram_message(issue_id: str,
                             description_raw: str,
                             url: str) -> str:
     """Формує HTML-повідомлення для Telegram."""
+    # Екранований ID задачі для HTML
     formatted_issue_id: str = escape(issue_id)
     summary: str = escape(summary_raw)
     description: str = escape(description_raw)
@@ -96,10 +99,10 @@ def format_telegram_message(issue_id: str,
     elif len(description) > DESCRIPTION_MAX_LEN:
         description = f'{description[:DESCRIPTION_MAX_LEN]}…'
 
-    telegram_message: str = TELEGRAM_MESSAGE_TEMPLATE.format(issue_id=formatted_issue_id,
-                                                             summary=summary,
-                                                             url=url)
-    return telegram_message
+    telegram_msg: str = TELEGRAM_MESSAGE_TEMPLATE.format(issue_id=formatted_issue_id,
+                                                         summary=summary,
+                                                         url=url)
+    return telegram_msg
 
 
 def as_mapping(obj: object | None) -> Mapping[str, object] | None:
@@ -111,8 +114,11 @@ def as_mapping(obj: object | None) -> Mapping[str, object] | None:
 
 def resolve_from_map(tg_user_id: int | None) -> tuple[str | None, str | None, str | None]:
     """Знаходить ``login``, ``email`` та ``yt_user_id`` для користувача з Telegram ID."""
+    # Локальний логін користувача
     login: str | None = None
+    # Локальний email користувача
     email: str | None = None
+    # Локальний YouTrack ID користувача
     yt_user_id: str | None = None
 
     if tg_user_id is None:
@@ -120,11 +126,13 @@ def resolve_from_map(tg_user_id: int | None) -> tuple[str | None, str | None, st
         return login, email, yt_user_id
 
     try:
+        # Шлях до файлу мапи користувачів
         target_file: Path | None = _resolve_map_path()
         if target_file is None or not target_file.exists():
             logger.error('Файл мапи користувачів не знайдено за шляхом: %s', USER_MAP_FILE)
             return login, email, yt_user_id
 
+        # Актуальна мапа користувачів
         mapping: UserMap = _load_mapping(target_file)
         entry: UserMapEntry | str | None = mapping.get(str(tg_user_id))
         if isinstance(entry, dict):
@@ -153,7 +161,7 @@ def _resolve_map_path() -> Path | None:
         candidate: Path = target_file / 'user_map.json'
         logger.debug('USER_MAP_FILE визначено як директорія, використовую %s', candidate)
         return candidate
-    # Працюють безпосередньо з файлом, якщо вказано шлях до нього
+    # Робота безпосередньо з файлом user_map
     logger.debug('USER_MAP_FILE використовується напряму: %s', target_file)
     return target_file
 
@@ -162,7 +170,7 @@ def _load_mapping(path: Path) -> UserMap:
     """Завантажує JSON-дані з файлу мапи користувачів."""
     raw_text: str = path.read_text(encoding='utf-8')
     if not raw_text.strip():
-        # Інформують про порожній файл і повертають порожню мапу
+        # Повідомлення про порожній файл user_map
         logger.warning('USER_MAP_FILE %s порожній, використовую порожню мапу', path)
         return {}
 
@@ -173,7 +181,7 @@ def _load_mapping(path: Path) -> UserMap:
         return {}
 
     if not isinstance(raw_data, dict):
-        # Захищаються від непідтримуваного формату user_map
+        # Захист від непідтримуваного формату user_map
         logger.error('USER_MAP_FILE має некоректний формат (очікувався dict)')
         return {}
 
@@ -183,7 +191,7 @@ def _load_mapping(path: Path) -> UserMap:
 
     for key_obj, value in typed_data.items():
         if not isinstance(key_obj, str):
-            # Пропускають запис із некоректним типом ключа
+            # Пропуск запису з некоректним типом ключа
             logger.debug('Пропускаю запис user_map із некоректним ключем: %r', key_obj)
             continue
 
@@ -331,11 +339,11 @@ def _ensure_unique_mapping(mapping: UserMap, tg_user_id: int, *, login: str | No
             existing_login = raw_entry
 
         if login_normalized and existing_login and existing_login.lower() == login_normalized:
-            # Блокують дублювання логіна між різними користувачами
+            # Блокування дублювання логіна між користувачами
             logger.warning('Логін %s вже закріплено за користувачем %s', login, existing_key)
             raise ValueError(render(Msg.ERR_LOGIN_TAKEN))
 
         if yt_user_id and existing_yt_id and existing_yt_id == yt_user_id:
-            # Не дозволяють повторно привʼязати той самий YouTrack акаунт
+            # Заборона повторного привʼязування YouTrack акаунта
             logger.warning('YouTrack ID %s вже закріплено за користувачем %s', yt_user_id, existing_key)
             raise ValueError(render(Msg.ERR_USER_MAP_YT_TAKEN))
