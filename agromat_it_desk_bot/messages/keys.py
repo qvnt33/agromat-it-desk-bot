@@ -51,3 +51,7 @@ class Msg(str, Enum):
     ERR_USER_MAP_INPUT_REQUIRED = 'err.user_map_input_required'
     ERR_USER_MAP_EMPTY = 'err.user_map_empty'
     ERR_USER_MAP_YT_TAKEN = 'err.user_map_yt_taken'
+
+    # YouTrack
+    ERR_YT_ISSUE_NO_URL = 'err.yt_issue_no_url'
+    ERR_YT_DESCRIPTION_EMPTY = 'err.yt_description_empty'

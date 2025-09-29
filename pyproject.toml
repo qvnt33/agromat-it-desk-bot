@@ -90,3 +90,26 @@ warn_redundant_casts = true  # Попередження про зайві при
 warn_no_return = true  # Попередження про функції, що не мають явного повернення значення
 check_untyped_defs = true  # Вимагати перевірки для функцій без анотацій типів
 show_column_numbers = true  # Показувати номери колонок у помилках
+
+[tool.pyright]
+typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"
+
+include = ["agromat_it_desk_bot", "tests"]
+exclude = ["**/.venv", "**/__pycache__", "**/.*", "**/node_modules"]
+
+[tool.pyright.diagnosticSeverityOverrides]
+# приглушити шум
+reportUnknownArgumentType = "none"
+reportUnknownVariableType = "none"
+reportUnknownParameterType = "none"
+reportUnknownMemberType = "none"
+reportUnknownLambdaType = "none"
+reportMissingTypeStubs = "none"
+
+# залишити реально небезпечне
+reportGeneralTypeIssues = "error"
+reportOptionalMemberAccess = "error"
+reportOptionalSubscript = "error"
+reportOptionalCall = "error"

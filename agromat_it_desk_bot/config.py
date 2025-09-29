@@ -41,3 +41,8 @@ YOUTRACK_ASSIGNEE_FIELD_NAME: str = os.getenv('YOUTRACK_ASSIGNEE_FIELD_NAME', 'A
 # Налаштовують поле стану та значення для встановлення при "Прийняти"
 YOUTRACK_STATE_FIELD_NAME: str = os.getenv('YOUTRACK_STATE_FIELD_NAME', 'State')
 YOUTRACK_STATE_IN_PROGRESS: str = os.getenv('YOUTRACK_STATE_IN_PROGRESS', 'In Progress')
+
+# Шаблони текстів
+TELEGRAM_MESSAGE_TEMPLATE = '<b>{issue_id}</b> — {summary}\n\
+    {url}\n\
+    {description}'

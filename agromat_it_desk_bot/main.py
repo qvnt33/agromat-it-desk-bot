@@ -2,15 +2,10 @@
 
 from __future__ import annotations
 
-if __name__ == '__main__' and __package__ is None:  # pragma: no cover - CLI запуск
-    import pathlib
-    import sys
-
-    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
-
 import logging
-from collections.abc import Mapping
-from typing import Any, cast
+from collections.abc import AsyncIterator, Mapping
+from contextlib import asynccontextmanager
+from typing import Any
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
@@ -23,17 +18,31 @@ from agromat_it_desk_bot.config import YT_BASE_URL, YT_WEBHOOK_SECRET
 from agromat_it_desk_bot.messages import Msg, render
 from agromat_it_desk_bot.telegram_service import send_message
 from agromat_it_desk_bot.utils import (
-    ISSUE_ID_UNKNOWN,
     configure_logging,
     extract_issue_id,
-    format_message,
+    format_telegram_message,
     get_str,
 )
 
 configure_logging()
 logger: logging.Logger = logging.getLogger(__name__)
 
-app = FastAPI()
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Керує запуском та завершенням FastAPI застосунку.
+
+    :param _app: Поточний екземпляр FastAPI.
+    :yields: ``None`` протягом роботи застосунку.
+    """
+    try:
+        yield
+    finally:
+        # Закривають HTTP-сесію бота Aiogram при виході
+        await telegram_aiogram.shutdown()
+
+
+app = FastAPI(lifespan=_lifespan)
 
 # Перехідні псевдоніми для збереження сумісності тестів/імпортів
 PendingLoginChange = telegram_commands.PendingLoginChange
@@ -52,52 +61,57 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:
     :raises HTTPException: 400 при некоректному пейлоаді; 403 при невірному секреті.
     """
     payload: Any = await request.json()
-    if not isinstance(payload, dict):
-        # Захищаються від некоректного JSON
-        raise HTTPException(status_code=400, detail=render(Msg.HTTP_INVALID_PAYLOAD))
 
-    data: dict[str, object] = cast(dict[str, object], payload)
+    if not isinstance(payload, dict):
+        # Перевірка формату JSON
+        raise HTTPException(status_code=400, detail=render(Msg.HTTP_INVALID_PAYLOAD))
 
     if YT_WEBHOOK_SECRET is not None:
         auth_header: str | None = request.headers.get('Authorization')
         expected: str = f'Bearer {YT_WEBHOOK_SECRET}'
+
         if auth_header != expected:
-            # Фіксують спробу використати чужий секрет
+            # Контроль секрету YouTrack
             logger.warning('Невірний секрет YouTrack вебхука')
             raise HTTPException(status_code=403, detail=render(Msg.HTTP_FORBIDDEN))
 
-    logger.debug('Отримано вебхук YouTrack: %s', data)
+    logger.debug('Отримано вебхук YouTrack: %s', payload)
 
-    issue_candidate: object | None = data.get('issue')
-    issue: Mapping[str, object] = (
-        cast(dict[str, object], issue_candidate) if isinstance(issue_candidate, dict) else data
-    )
+    # Дані задачі вебхука
+    issue_candidate: object | None = payload.get('issue')
+    issue: Mapping[str, object] = issue_candidate if isinstance(issue_candidate, dict) else payload
 
     issue_id: str = extract_issue_id(issue)
     summary: str = get_str(issue, 'summary')
     description: str = get_str(issue, 'description')
 
-    url_val: str | None = None
-    url_field: object | None = issue.get('url')
-    issue_unknown: str = ISSUE_ID_UNKNOWN
+    url_val: str | None = None  # Посилання на задачу для повідомлення
+    url_field: object | None = issue.get('url')  # Поле URL з вебхука YouTrack
+
+    issue_id_unknown_msg: str = render(Msg.UTILS_ISSUE_NO_ID)  # Текст маркера невідомого ID задачі
+
     if isinstance(url_field, str) and url_field:
-        # Використовують посилання з вебхука
+        # Використання посилання з вебхука
         url_val = url_field
-    elif issue_id and issue_id != issue_unknown and YT_BASE_URL:
-        # Формують посилання на задачу в YouTrack за замовчуванням
+    elif issue_id != issue_id_unknown_msg and YT_BASE_URL:
+        # Формування посилання на задачу в YouTrack
         url_val = f'{YT_BASE_URL}/issue/{issue_id}'
+    elif url_val is None:
+        # Повідомлення, що невідомо URL заявки
+        url_val = render(Msg.ERR_YT_ISSUE_NO_URL)
 
-    message: str = format_message(issue_id, summary, description, url_val)
+    message: str = format_telegram_message(issue_id, summary, description, url_val)
 
+    # Inline-клавіатура з кнопкою прийняття
     reply_markup: dict[str, object] | None = None
-    if issue_id and issue_id != issue_unknown:
+    if issue_id and issue_id != issue_id_unknown_msg:
         button_text: str = render(Msg.CALLBACK_ACCEPT_BUTTON)
         reply_markup = {
-            # Прикріплюють кнопку прийняття задачі з ідентифікатором
+            # Додавання кнопки прийняття задачі
             'inline_keyboard': [[{'text': button_text, 'callback_data': f'accept|{issue_id}'}]],
         }
 
-    issue_label: str = issue_id if issue_id and issue_id != issue_unknown else issue_unknown
+    issue_label: str = issue_id if issue_id and issue_id != issue_id_unknown_msg else issue_id_unknown_msg
     logger.info('Підготовано повідомлення для задачі %s', issue_label)
     await run_in_threadpool(send_message, message, reply_markup)
     return {'ok': True}
@@ -135,9 +149,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-
-
-@app.on_event('shutdown')
-async def _shutdown_bot() -> None:
-    """Закриває сесію бота Aiogram при завершенні FastAPI."""
-    await telegram_aiogram.shutdown()

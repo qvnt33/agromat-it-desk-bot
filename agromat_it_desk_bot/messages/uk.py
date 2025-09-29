@@ -40,12 +40,16 @@ UK: Mapping[Msg, str] = {
     Msg.ERR_NO_PENDING: 'Немає запиту на підтвердження логіна для цього користувача.',
     Msg.ERR_STORAGE: 'Сталася помилка при збереженні даних. Адміністратори вже в курсі.',
     Msg.ERR_UNKNOWN: 'Сталася непередбачувана помилка. Спробуйте пізніше.',
-    Msg.ERR_YT_NOT_CONFIGURED: 'YouTrack інтеграція не налаштована. Зверніться до адміністратора.',
-    Msg.ERR_YT_TOKEN_MISSING: 'YouTrack токен не налаштовано. Зверніться до адміністратора.',
-    Msg.ERR_YT_FETCH: 'Не вдалося отримати дані з YouTrack. Спробуйте пізніше.',
-    Msg.ERR_YT_USER_NOT_FOUND: 'Користувача з таким логіном у YouTrack не знайдено.',
     Msg.ERR_CALLBACK_RIGHTS: 'Недостатньо прав',
     Msg.ERR_CALLBACK_UNKNOWN: 'Невідома дія',
     Msg.ERR_CALLBACK_ASSIGN_FAILED: 'Не вдалося призначити',
     Msg.ERR_CALLBACK_ASSIGN_ERROR: 'Помилка: не вдалось прийняти',
+
+    # YouTrack
+    Msg.ERR_YT_ISSUE_NO_URL: 'Невідомо URL заявки.',
+    Msg.ERR_YT_DESCRIPTION_EMPTY: 'Заявка не має опису.',
+    Msg.ERR_YT_NOT_CONFIGURED: 'YouTrack інтеграція не налаштована. Зверніться до адміністратора.',
+    Msg.ERR_YT_TOKEN_MISSING: 'YouTrack токен не налаштовано. Зверніться до адміністратора.',
+    Msg.ERR_YT_FETCH: 'Не вдалося отримати дані з YouTrack. Спробуйте пізніше.',
+    Msg.ERR_YT_USER_NOT_FOUND: 'Користувача з таким логіном у YouTrack не знайдено.',
 }

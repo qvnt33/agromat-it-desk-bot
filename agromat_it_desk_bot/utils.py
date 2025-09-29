@@ -10,12 +10,10 @@ from html import escape
 from pathlib import Path
 from typing import Any, TypedDict, cast
 
-from agromat_it_desk_bot.config import DESCRIPTION_MAX_LEN, USER_MAP_FILE
+from agromat_it_desk_bot.config import DESCRIPTION_MAX_LEN, TELEGRAM_MESSAGE_TEMPLATE, USER_MAP_FILE
 from agromat_it_desk_bot.messages import Msg, render
 
 logger: logging.Logger = logging.getLogger(__name__)
-# Заздалегідь готують локалізований маркер для невідомого ID задачі
-ISSUE_ID_UNKNOWN: str = render(Msg.UTILS_ISSUE_NO_ID)
 
 
 class UserMapEntry(TypedDict, total=False):
@@ -57,13 +55,14 @@ def get_str(source: Mapping[str, object], key: str) -> str:
 def extract_issue_id(issue: Mapping[str, object]) -> str:
     """Отримує читабельний ID задачі з доступних полів або формує його."""
     identifier: str = get_str(issue, 'idReadable') or get_str(issue, 'id')
-    if identifier:
+    if len(identifier) != 0:
         return identifier
 
     number: object | None = issue.get('numberInProject')
     project_raw: object | None = issue.get('project')
     project_short: str | None = None
     project_mapping: Mapping[str, object] | None = as_mapping(project_raw)
+
     if project_mapping is not None:
         short_name_obj: object | None = project_mapping.get('shortName')
         name_obj: object | None = project_mapping.get('name')
@@ -78,25 +77,29 @@ def extract_issue_id(issue: Mapping[str, object]) -> str:
         # Формують читабельний ідентифікатор за шаблоном PROJECT-N
         return f'{project_short}-{number}'
 
-    return ISSUE_ID_UNKNOWN
+    issue_id_unknown_msg: str = render(Msg.UTILS_ISSUE_NO_ID)
+
+    return issue_id_unknown_msg
 
 
-def format_message(issue_id: str, summary_raw: str, description_raw: str, url: str | None) -> str:
+def format_telegram_message(issue_id: str,
+                            summary_raw: str,
+                            description_raw: str,
+                            url: str) -> str:
     """Формує HTML-повідомлення для Telegram."""
+    formatted_issue_id: str = escape(issue_id)
     summary: str = escape(summary_raw)
     description: str = escape(description_raw)
-    parts: list[str] = [f'<b>{escape(issue_id)}</b> — {summary}']
 
-    if url:
-        parts.append(url)
+    if len(description) == 0:
+        description = render(Msg.ERR_YT_DESCRIPTION_EMPTY)
+    elif len(description) > DESCRIPTION_MAX_LEN:
+        description = f'{description[:DESCRIPTION_MAX_LEN]}…'
 
-    if description:
-        shortened: str = (
-            f'{description[:DESCRIPTION_MAX_LEN]}…' if len(description) > DESCRIPTION_MAX_LEN else description
-        )
-        parts.append(shortened)
-
-    return '\n'.join(parts)
+    telegram_message: str = TELEGRAM_MESSAGE_TEMPLATE.format(issue_id=formatted_issue_id,
+                                                             summary=summary,
+                                                             url=url)
+    return telegram_message
 
 
 def as_mapping(obj: object | None) -> Mapping[str, object] | None:
