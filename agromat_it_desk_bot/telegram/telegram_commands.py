@@ -59,7 +59,7 @@ def handle_register_command(chat_id: int, message: Mapping[str, object], text: s
         _send_template(chat_id, Msg.ERR_REGISTER_FORMAT)
         return
 
-    from_obj: object | None = message.get('from')
+    from_obj: object | None = message.get('from') or message.get('from_user')
     from_mapping: Mapping[str, object] | None = from_obj if isinstance(from_obj, dict) else None
     # Беруть ідентифікатор користувача з метаданих повідомлення
     tg_user_obj: object | None = from_mapping.get('id') if from_mapping else None
@@ -128,7 +128,7 @@ def handle_confirm_login_command(chat_id: int, message: Mapping[str, object], te
         _send_template(chat_id, Msg.ERR_CONFIRM_FORMAT)
         return
 
-    from_obj: object | None = message.get('from')
+    from_obj: object | None = message.get('from') or message.get('from_user')
     from_mapping: Mapping[str, object] | None = from_obj if isinstance(from_obj, dict) else None
     # Захищаються від підміни чату під час підтвердження
     tg_user_obj: object | None = from_mapping.get('id') if from_mapping else None

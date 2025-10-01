@@ -38,7 +38,12 @@ def clear_state(monkeypatch: pytest.MonkeyPatch) -> SentMessages:
 
 def build_message(user_id: int, text: str) -> dict[str, object]:
     """Конструює мінімальний payload Telegram для тестів."""
-    return {'chat': {'id': 777, 'type': 'private'}, 'from': {'id': user_id}, 'text': text}
+    return {
+        'chat': {'id': 777, 'type': 'private'},
+        'from': {'id': user_id},
+        'from_user': {'id': user_id},
+        'text': text,
+    }
 
 
 def patch_resolve_from_map(monkeypatch: pytest.MonkeyPatch, result: tuple[str | None, str | None, str | None]) -> None:

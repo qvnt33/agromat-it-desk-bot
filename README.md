@@ -90,12 +90,11 @@
 Користувачі можуть додавати себе в мапу напряму з Telegram, надіславши `/register <логін>`. Бот автоматично знайде відповідний обліковий запис у YouTrack і збереже `login`, `email` та `id` у `user_map.json`. Логін та YouTrack ID мають бути унікальними — якщо вони вже привʼязані до іншого Telegram ID, реєстрацію буде відхилено. Для зміни логіна спершу виконайте `/register <новий_логін>`, після чого бот попросить підтвердити дію командою `/confirm_login <новий_логін>`.
 
 ### YouTrack workflow
-Файл `webhooks/yt2tg_webhook.js` можна використати як кастомний **workflow**:
-1. Administration → Workflows → **Add workflow**.
-2. Вставити код з `webhooks/yt2tg_webhook.js`.
-3. Замінити `WEBHOOK_URL` на вашу публічну адресу (без ` /youtrack`).
-4. Активувати **workflow** для потрібних проєктів.
+У каталозі `webhooks/` є `yt2tg-webhook-app.zip` для інтеграції:
 
+- У **Administration → Apps → Add app → Upload ZIP file** завантажити `yt2tg-webhook-app.zip`. Далі в налаштуваннях додатку заповнити `Basic Backend URL` (адреса сервера без суфіксу `/youtrack`) та `Secret for Authorization`, а у вкладці **Projects** додати свій проєкт. Пакет містить:
+   - `yt2tg_webhook.js` — відправляє дані про створені задачі на ваш бекенд (для авторизації використовує `WEBHOOK_SECRET`).
+   - `yt_assignee_status_sync.js` — ставить «В роботі», коли призначають виконавця, і навпаки (ігнорує сервісні акаунти).
 
 ## Архітектура
 - `agromat_it_desk_bot/main.py` — **FastAPI** додаток з ендпоінтами `/youtrack` і `/telegram`, логікою форматування повідомлень, призначення та оновлення стану.
@@ -132,8 +131,6 @@
   curl -X POST "https://api.telegram.org/bot$BOT_TOKEN/setWebhook" \
        -d "url=https://<public-domain>/telegram" \
        -d "secret_token=$TELEGRAM_WEBHOOK_SECRET" \
-       -d "allowed_updates[]=message" \
-       -d "allowed_updates[]=callback_query"
   ```
 - **Очистити чергу** (*наприклад, після зміни домену*)
   ```bash
@@ -183,7 +180,8 @@ agromat_it_desk_bot/
 ├─ utils.py            # Допоміжні функції, user_map, YouTrack форматування
 └─ ...
 webhooks/
-└─ yt2tg_webhook.js    # приклад workflow для YouTrack
+├─ yt2tg_webhook.js           # приклад workflow для YouTrack
+└─ yt2tg-webhook-app.zip      # готовий YouTrack app (вебхук + синхронізація статусу/виконавця)
 .env.example           # приклад налаштування середовища
 user_map.json.example  # приклади відповідностей TG → YouTrack
 requirements.txt       # перелік залежностей
