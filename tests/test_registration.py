@@ -7,7 +7,7 @@ from typing import TypedDict, cast
 
 import pytest
 
-import agromat_it_desk_bot.telegram_commands as commands_module
+import agromat_it_desk_bot.telegram.telegram_commands as commands_module
 from agromat_it_desk_bot.messages import Msg, render
 
 
@@ -71,7 +71,7 @@ def patch_resolve_login_details(
 
     def resolver(chat_id: int, login: str) -> Pending | None:  # noqa: ARG001
         if details is None and failure_message is not None:
-            call_api_attr: object = getattr(commands_module, 'call_api')
+            call_api_attr: object = commands_module.call_api
             call_api_func: Callable[[str, dict[str, object]], object] = cast(
                 Callable[[str, dict[str, object]], object], call_api_attr,
             )

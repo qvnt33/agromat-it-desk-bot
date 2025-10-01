@@ -38,11 +38,7 @@ USER_MAP_FILE: Path = Path(USER_MAP_PATH)
 # Визначають назву кастом-філда для виконавця в YouTrack (за замовчуванням Assignee)
 YOUTRACK_ASSIGNEE_FIELD_NAME: str = os.getenv('YOUTRACK_ASSIGNEE_FIELD_NAME', 'Assignee')
 
-# Налаштовують поле стану та значення для встановлення при "Прийняти"
-YOUTRACK_STATE_FIELD_NAME: str = os.getenv('YOUTRACK_STATE_FIELD_NAME', 'State')
-YOUTRACK_STATE_IN_PROGRESS: str = os.getenv('YOUTRACK_STATE_IN_PROGRESS', 'In Progress')
-
 # Шаблони текстів
-TELEGRAM_MESSAGE_TEMPLATE = '<b>{issue_id}</b> — {summary}\n\
+TELEGRAM_MAIN_MESSAGE_TEMPLATE = '<b>{issue_id}</b> — {summary}\n\
     {url}\n\
     {description}'

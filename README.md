@@ -71,8 +71,6 @@
 | `DESCRIPTION_MAX_LEN` | Максимальна довжина опису в **Telegram** |
 | `USER_MAP_PATH` | Шлях до **JSON-файла** з мапою користувачів |
 | `YOUTRACK_ASSIGNEE_FIELD_NAME` | Назва поля виконавця (*наприклад, «Виконавець»*) |
-| `YOUTRACK_STATE_FIELD_NAME` | Назва поля стану (*наприклад, «Стан»*)|
-| `YOUTRACK_STATE_IN_PROGRESS` | Стан, на який переводити задачу після прийняття (*наприклад, «В роботі»*)|
 
 > Якщо `TELEGRAM_WEBHOOK_SECRET` не вказано, перевірка секрету вимикається. Для продакшен середовища краще залишити її увімкненою.
 
@@ -166,17 +164,22 @@
 | Натискання «Прийняти» нічого не дає | Переконатися, що вебхук **Telegram** вказує на `/telegram` і сервіс працює. |
 | «Не вдалося визначити ID користувача» | Надіслати `/register <логін>` у бот або вручну додати запис у `user_map.json`. |
 | «Не знайдено читабельного ID» | Перевірити workflow: має передавати `idReadable` або `project.shortName` + `numberInProject`. |
-| Статус не змінюється | Звірити `YOUTRACK_STATE_FIELD_NAME` і `YOUTRACK_STATE_IN_PROGRESS` з бандлом поля в **YouTrack**. |
 
 
 ## Структура проєкту (з ключовими модулями)
 ```
 agromat_it_desk_bot/
 ├─ main.py             # FastAPI застосунок, вебхуки /youtrack та /telegram
-├─ telegram_aiogram.py # Router/Dispatcher Aiogram, обробка message + callback
-├─ telegram_commands.py# Бізнес-логіка команд /register та /confirm_login
 ├─ callback_handlers.py# Призначення задач (кнопка «Прийняти»)
-├─ telegram_service.py # Синхронні виклики Telegram Bot API
+├─ telegram/
+│  ├─ __init__.py
+│  ├─ telegram_aiogram.py # Router/Dispatcher Aiogram, обробка message + callback
+│  ├─ telegram_commands.py # Бізнес-логіка команд /register та /confirm_login
+│  └─ telegram_service.py # Синхронні виклики Telegram Bot API
+├─ youtrack/
+│  ├─ __init__.py
+│  ├─ youtrack_client.py # Низькорівневий клієнт YouTrack REST API
+│  └─ youtrack_service.py # Логіка призначення задач та зміни стану
 ├─ utils.py            # Допоміжні функції, user_map, YouTrack форматування
 └─ ...
 webhooks/

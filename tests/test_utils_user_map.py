@@ -10,7 +10,6 @@ from typing import Any
 import pytest
 
 from agromat_it_desk_bot import utils
-from agromat_it_desk_bot.messages import Msg, render
 
 
 @pytest.fixture()
@@ -36,7 +35,7 @@ def test_upsert_user_map_entry_blocks_duplicate_login(tmp_user_map: Path) -> Non
     data: dict[str, dict[str, str]] = {'100': {'login': 'support', 'id': 'YT-1'}}
     tmp_user_map.write_text(json.dumps(data, ensure_ascii=False))
 
-    expected_message: str = render(Msg.ERR_LOGIN_TAKEN)
+    expected_message: str = 'Цей логін вже закріплено за іншим користувачем.'
 
     with pytest.raises(ValueError, match=re.escape(expected_message)):
         utils.upsert_user_map_entry(200, login='support')

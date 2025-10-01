@@ -8,9 +8,9 @@ import logging.config
 from collections.abc import Mapping
 from html import escape
 from pathlib import Path
-from typing import Any, TypedDict, cast
+from typing import Any, TypedDict
 
-from agromat_it_desk_bot.config import DESCRIPTION_MAX_LEN, TELEGRAM_MESSAGE_TEMPLATE, USER_MAP_FILE
+from agromat_it_desk_bot.config import DESCRIPTION_MAX_LEN, TELEGRAM_MAIN_MESSAGE_TEMPLATE, USER_MAP_FILE
 from agromat_it_desk_bot.messages import Msg, render
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -36,11 +36,11 @@ def configure_logging(config_path: Path | None = None) -> None:
         with target_path.open('r', encoding='utf-8') as config_file:
             config_data: dict[str, Any] = json.load(config_file)
     except FileNotFoundError:
-        logging.basicConfig(level=logging.INFO)
+        logging.basicConfig(level=logging.DEBUG)
         message_missing: str = 'logging.conf не знайдено (%s), використовую базову конфігурацію'
         logging.getLogger(__name__).warning(message_missing, target_path)
     except json.JSONDecodeError as exc:
-        logging.basicConfig(level=logging.INFO)
+        logging.basicConfig(level=logging.DEBUG)
         message_invalid: str = 'Не вдалося прочитати logging.conf (%s): %s, використовую базову конфігурацію'
         logging.getLogger(__name__).warning(message_invalid, target_path, exc)
     else:
@@ -54,7 +54,7 @@ def get_str(source: Mapping[str, object], key: str) -> str:
 
 
 def extract_issue_id(issue: Mapping[str, object]) -> str:
-    """Отримує читабельний ID задачі з доступних полів або формує його."""
+    """Отримує читабельний ID задачі (<PROJECT>-<NUMBER>) з доступних полів або формує його."""
     identifier: str = get_str(issue, 'idReadable') or get_str(issue, 'id')
     if identifier:
         return identifier
@@ -63,13 +63,12 @@ def extract_issue_id(issue: Mapping[str, object]) -> str:
     project_raw: object | None = issue.get('project')  # Сирі дані проєкту з вебхука
     project_short: str | None = None  # Скорочена назва проєкту
 
-    project_mapping: Mapping[str, object] | None = as_mapping(project_raw)
-
-    if project_mapping is not None:
-        short_name_obj: object | None = project_mapping.get('shortName')
-        name_obj: object | None = project_mapping.get('name')
+    if project_raw is not None and isinstance(project_raw, dict):
+        short_name_obj: object | None = project_raw.get('shortName')
+        name_obj: object | None = project_raw.get('name')
         short_name: str | None = short_name_obj if isinstance(short_name_obj, str) else None
         name: str | None = name_obj if isinstance(name_obj, str) else None
+
         if short_name:
             project_short = short_name
         elif name:
@@ -79,7 +78,7 @@ def extract_issue_id(issue: Mapping[str, object]) -> str:
         # Формування читабельного ідентифікатора PROJECT-N
         return f'{project_short}-{number}'
 
-    issue_id_unknown_msg: str = render(Msg.UTILS_ISSUE_NO_ID)
+    issue_id_unknown_msg: str = render(Msg.YT_ISSUE_NO_ID)
 
     return issue_id_unknown_msg
 
@@ -99,17 +98,11 @@ def format_telegram_message(issue_id: str,
     elif len(description) > DESCRIPTION_MAX_LEN:
         description = f'{description[:DESCRIPTION_MAX_LEN]}…'
 
-    telegram_msg: str = TELEGRAM_MESSAGE_TEMPLATE.format(issue_id=formatted_issue_id,
-                                                         summary=summary,
-                                                         url=url)
+    telegram_msg: str = TELEGRAM_MAIN_MESSAGE_TEMPLATE.format(issue_id=formatted_issue_id,
+                                                              summary=summary,
+                                                              url=url,
+                                                              description=description)
     return telegram_msg
-
-
-def as_mapping(obj: object | None) -> Mapping[str, object] | None:
-    """Повертає словник, якщо обʼєкт є ``dict``."""
-    if isinstance(obj, dict):
-        return cast(Mapping[str, object], obj)
-    return None
 
 
 def resolve_from_map(tg_user_id: int | None) -> tuple[str | None, str | None, str | None]:
@@ -151,6 +144,11 @@ def resolve_from_map(tg_user_id: int | None) -> tuple[str | None, str | None, st
     except Exception as exc:  # noqa: BLE001
         logger.exception('Не вдалося прочитати USER_MAP_FILE: %s', exc)
 
+    logger.debug('resolve_from_map результат: tg_user_id=%s login=%s email=%s yt_user_id=%s',
+                 tg_user_id,
+                 login,
+                 email,
+                 yt_user_id)
     return login, email, yt_user_id
 
 
@@ -186,10 +184,8 @@ def _load_mapping(path: Path) -> UserMap:
         return {}
 
     result: UserMap = {}
-    typed_data: dict[object, object] = cast(dict[object, object], raw_data)
-    # Обходять кожен запис user_map, нормалізуючи формат
-
-    for key_obj, value in typed_data.items():
+    # Записи user_map з сирого словника
+    for key_obj, value in raw_data.items():
         if not isinstance(key_obj, str):
             # Пропуск запису з некоректним типом ключа
             logger.debug('Пропускаю запис user_map із некоректним ключем: %r', key_obj)
@@ -207,9 +203,8 @@ def _load_mapping(path: Path) -> UserMap:
 
 def _normalize_user_record(key: str, value: object) -> UserMapEntry | str | None:
     """Перетворює будь-який запис user_map на уніфікований вигляд."""
-    mapping_value: Mapping[str, object] | None = as_mapping(value)
-    if mapping_value is not None:
-        return _extract_entry(mapping_value)
+    if isinstance(value, dict):
+        return _extract_entry(value)
 
     if isinstance(value, str):
         return value
@@ -246,7 +241,7 @@ def upsert_user_map_entry(
 ) -> None:
     """Додає або оновлює запис користувача у ``user_map.json``."""
     if not any((login, email, yt_user_id)):
-        message_required: str = render(Msg.ERR_USER_MAP_INPUT_REQUIRED)
+        message_required: str = 'Потрібно надати принаймні одне з полів: login, email або yt_user_id'
         logger.error('Не вдалося оновити мапу користувачів: %s', message_required)
         raise ValueError(message_required)
 
@@ -269,7 +264,7 @@ def upsert_user_map_entry(
         entry['id'] = yt_user_id
 
     if not entry:
-        message_empty: str = render(Msg.ERR_USER_MAP_EMPTY)
+        message_empty: str = 'Надано порожні дані для оновлення мапи користувачів'
         logger.error(message_empty)
         raise ValueError(message_empty)
 
@@ -311,6 +306,7 @@ def is_login_taken(login: str, *, exclude_tg_user_id: int | None = None) -> bool
             existing_login = raw_entry
 
         if existing_login and existing_login.lower() == login_normalized:
+            logger.debug('Перевірка зайнятого логіна: target=%s власник=%s', login, key)
             return True
 
     return False
@@ -341,9 +337,9 @@ def _ensure_unique_mapping(mapping: UserMap, tg_user_id: int, *, login: str | No
         if login_normalized and existing_login and existing_login.lower() == login_normalized:
             # Блокування дублювання логіна між користувачами
             logger.warning('Логін %s вже закріплено за користувачем %s', login, existing_key)
-            raise ValueError(render(Msg.ERR_LOGIN_TAKEN))
+            raise ValueError('Цей логін вже закріплено за іншим користувачем.')
 
         if yt_user_id and existing_yt_id and existing_yt_id == yt_user_id:
             # Заборона повторного привʼязування YouTrack акаунта
             logger.warning('YouTrack ID %s вже закріплено за користувачем %s', yt_user_id, existing_key)
-            raise ValueError(render(Msg.ERR_USER_MAP_YT_TAKEN))
+            raise ValueError('Цей YouTrack акаунт вже привʼязаний до іншого користувача.')

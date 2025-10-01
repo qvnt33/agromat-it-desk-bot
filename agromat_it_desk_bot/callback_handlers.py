@@ -1,18 +1,16 @@
-"""Надає хелпери для обробки Telegram callback'ів (кнопка «Прийняти»)."""
+"""Надає хелпери для обробки Telegram callback'ів (кнопка "Прийняти")."""
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
 from typing import Any, NamedTuple
 
 from fastapi import HTTPException, Request
 
-from agromat_it_desk_bot.config import ALLOWED_TG_USER_IDS, TELEGRAM_WEBHOOK_SECRET, YOUTRACK_STATE_IN_PROGRESS
+from agromat_it_desk_bot.config import ALLOWED_TG_USER_IDS, TELEGRAM_WEBHOOK_SECRET
 from agromat_it_desk_bot.messages import Msg, render
-from agromat_it_desk_bot.telegram_service import call_api
-from agromat_it_desk_bot.utils import as_mapping
-from agromat_it_desk_bot.youtrack_service import assign_issue, resolve_account, set_state
+from agromat_it_desk_bot.telegram.telegram_service import call_api
+from agromat_it_desk_bot.youtrack.youtrack_service import assign_issue, resolve_account
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -37,7 +35,7 @@ def verify_telegram_secret(request: Request) -> None:
         secret: str | None = request.headers.get('X-Telegram-Bot-Api-Secret-Token')
         if secret != TELEGRAM_WEBHOOK_SECRET:
             logger.warning('Невірний секрет Telegram вебхука')
-            raise HTTPException(status_code=403, detail=render(Msg.HTTP_FORBIDDEN))
+            raise HTTPException(status_code=403, detail='Доступ заборонено.')
 
 
 def parse_callback_payload(payload: Any) -> CallbackContext | None:
@@ -46,34 +44,35 @@ def parse_callback_payload(payload: Any) -> CallbackContext | None:
     :param payload: Сирий JSON із даними Telegram.
     :returns: ``CallbackContext`` або ``None``.
     """
-    callback: Mapping[str, object] | None = as_mapping(payload.get('callback_query'))
+    callback = payload.get('callback_query')
     if callback is None:
+        logger.debug('Callback payload без callback_query: %s', payload)
         return None
 
     callback_id_obj: object | None = callback.get('id')
-    # Зберігають ідентифікатор callback для відповіді
+    # Ідентифікатор callback для відповіді
     callback_id: str | None = str(callback_id_obj) if isinstance(callback_id_obj, (str, int)) else None
 
-    from_user_mapping: Mapping[str, object] | None = as_mapping(callback.get('from'))
+    from_user_mapping = callback.get('from')
     tg_user_id: int | None = None
     if from_user_mapping is not None:
-        # Дістають Telegram ID користувача з оновлення
+        # Telegram ID користувача з оновлення
         tg_user_id_obj: object | None = from_user_mapping.get('id')
         if isinstance(tg_user_id_obj, int):
             tg_user_id = tg_user_id_obj
 
     chat_id: int | None = None
     message_id: int | None = None
-    message_mapping: Mapping[str, object] | None = as_mapping(callback.get('message'))
+    message_mapping = callback.get('message')
     if message_mapping is not None:
-        chat_mapping: Mapping[str, object] | None = as_mapping(message_mapping.get('chat'))
+        chat_mapping = message_mapping.get('chat')
         if chat_mapping is not None:
             chat_id_obj: object | None = chat_mapping.get('id')
             if isinstance(chat_id_obj, int):
                 chat_id = chat_id_obj
 
         message_id_obj: object | None = message_mapping.get('message_id')
-        # Запамʼятовують оригінальне повідомлення для редагування клавіатури
+        # Оригінальне повідомлення для редагування клавіатури
         if isinstance(message_id_obj, int):
             message_id = message_id_obj
 
@@ -81,13 +80,18 @@ def parse_callback_payload(payload: Any) -> CallbackContext | None:
     payload_value: str = str(payload_raw) if isinstance(payload_raw, (str, int)) else ''
 
     if not (callback_id and chat_id and message_id):
+        logger.debug('Некоректний callback: callback_id=%s chat_id=%s message_id=%s',
+                     callback_id,
+                     chat_id,
+                     message_id)
         return None
-
-    return CallbackContext(callback_id, chat_id, message_id, payload_value, tg_user_id)
+    context = CallbackContext(callback_id, chat_id, message_id, payload_value, tg_user_id)
+    logger.debug('Побудовано CallbackContext: callback_id=%s tg_user_id=%s', callback_id, tg_user_id)
+    return context
 
 
 def is_user_allowed(tg_user_id: int | None) -> bool:
-    """Перевіряє, чи має користувач право натискати кнопку «Прийняти».
+    """Перевіряє, чи має користувач право натискати кнопку "Прийняти".
 
     :param tg_user_id: Telegram ID користувача.
     :returns: ``True`` якщо користувач дозволений або whitelist порожній.
@@ -97,13 +101,18 @@ def is_user_allowed(tg_user_id: int | None) -> bool:
 
     if not ALLOWED_TG_USER_IDS:
         login, email, yt_user_id = resolve_account(tg_user_id)
-        return any((login, email, yt_user_id))
+        allowed: bool = any((login, email, yt_user_id))
+        logger.debug('Перевірка доступу без whitelist: tg_user_id=%s allowed=%s', tg_user_id, allowed)
+        return allowed
 
     if tg_user_id in ALLOWED_TG_USER_IDS:
+        logger.debug('Користувач у whitelist: tg_user_id=%s', tg_user_id)
         return True
 
     login, email, yt_user_id = resolve_account(tg_user_id)
-    return any((login, email, yt_user_id))
+    allowed = any((login, email, yt_user_id))
+    logger.debug('Перевірка доступу через map: tg_user_id=%s allowed=%s', tg_user_id, allowed)
+    return allowed
 
 
 def parse_action(payload: str) -> tuple[str, str | None]:
@@ -113,6 +122,7 @@ def parse_action(payload: str) -> tuple[str, str | None]:
     :returns: Пару ``(назва дії, ID задачі)``.
     """
     action, _, issue_id = payload.partition('|')
+    logger.debug('Розбір дії callback: action=%s issue_id=%s', action, issue_id)
     return action, issue_id or None
 
 
@@ -122,30 +132,27 @@ def handle_accept(issue_id: str, context: CallbackContext) -> None:
     :param issue_id: Читабельний ID задачі.
     :param context: Контекст callback-запиту.
     """
+    login: str | None
+    email: str | None
+    yt_user_id: str | None
     try:
-        login: str | None
-        email: str | None
-        yt_user_id: str | None
-        # Шукають дані користувача, що натиснув кнопку
         login, email, yt_user_id = resolve_account(context.tg_user_id)
         if not any((login, email, yt_user_id)):
             raise RuntimeError('Не знайдено мапінг користувача')
-
-        # Пробують призначити задачу на знайденого користувача
-        assigned: bool = assign_issue(issue_id, login, email, yt_user_id)
-        if assigned:
-            if YOUTRACK_STATE_IN_PROGRESS:
-                # Оновлюють стан задачі після успішного призначення
-                set_state(issue_id, YOUTRACK_STATE_IN_PROGRESS)
-
-            reply_success(context.callback_id)
-            remove_keyboard(context.chat_id, context.message_id)
-        else:
-            reply_assign_failed(context.callback_id)
     except Exception as exc:  # noqa: BLE001
-        # Логують усі внутрішні помилки, щоб розробники могли дослідити
-        logger.exception('Не вдалося обробити прийняття: %s', exc)
+        logger.exception('Не вдалося знайти користувача для прийняття: %s', exc)
         reply_assign_error(context.callback_id)
+        return
+
+    assigned: bool = assign_issue(issue_id, login, email, yt_user_id)
+    if not assigned:
+        reply_assign_failed(context.callback_id)
+        logger.warning('Не вдалося призначити задачу через callback: issue_id=%s', issue_id)
+        return
+
+    reply_success(context.callback_id)
+    remove_keyboard(context.chat_id, context.message_id)
+    logger.info('Задачу призначено через callback: issue_id=%s tg_user_id=%s', issue_id, context.tg_user_id)
 
 
 def reply_insufficient_rights(callback_id: str) -> None:

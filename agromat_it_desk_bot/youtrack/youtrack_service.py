@@ -5,19 +5,19 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 
-from agromat_it_desk_bot.config import YOUTRACK_ASSIGNEE_FIELD_NAME, YOUTRACK_STATE_FIELD_NAME
-from agromat_it_desk_bot.utils import as_mapping, resolve_from_map
-from agromat_it_desk_bot.youtrack_client import (
+from .youtrack_client import (
     CustomField,
     CustomFieldMap,
     YouTrackUser,
     assign_custom_field,
     fetch_issue_custom_fields,
-    find_state_value_id,
     find_user,
     find_user_id,
     get_issue_internal_id,
 )
+
+from agromat_it_desk_bot.config import YOUTRACK_ASSIGNEE_FIELD_NAME
+from agromat_it_desk_bot.utils import resolve_from_map
 
 logging.basicConfig(level=logging.INFO)
 logger: logging.Logger = logging.getLogger(__name__)
@@ -42,70 +42,43 @@ def assign_issue(issue_id_readable: str, login: str | None, email: str | None, u
     :returns: ``True`` у разі успішного призначення.
     """
     issue_id: str | None = get_issue_internal_id(issue_id_readable)
+    # Перевіряють, чи вдалося отримати внутрішній ID задачі
     if issue_id is None:
-        return False
-
-    yt_user_id: str | None = _resolve_target_user_id(login, email, user_id)
-    if yt_user_id is None:
+        logger.warning('Не знайдено внутрішній ID задачі: %s', issue_id_readable)
         return False
 
     assignee_field_id: str | None = _resolve_assignee_field_id(issue_id, issue_id_readable)
+    # Перевіряють наявність кастомного поля виконавця
     if assignee_field_id is None:
+        logger.warning('Відсутнє поле виконавця для задачі %s', issue_id_readable)
         return False
 
-    payload: dict[str, object] = {'value': _build_assignee_value(yt_user_id, login, email)}
+    payload: dict[str, object]
+    yt_user_id_resolved: str | None = None
+    if login is None and email is None and user_id is None:
+        # Зняття призначення
+        payload = {'value': None}
+        logger.debug('Готую payload для зняття виконавця: issue=%s', issue_id_readable)
+    else:
+        yt_user_id_resolved = _resolve_target_user_id(login, email, user_id)
+        # Переконуються, що користувача можна однозначно ідентифікувати
+        if yt_user_id_resolved is None:
+            logger.warning('Не визначено користувача для призначення: issue=%s login=%s email=%s',
+                           issue_id_readable,
+                           login,
+                           email)
+            return False
+
+        payload = {'value': _build_assignee_value(yt_user_id_resolved, login, email)}
 
     if assign_custom_field(issue_id, assignee_field_id, payload):
-        logger.info('Задачу %s призначено на користувача id=%s login=%s', issue_id_readable, yt_user_id, login)
+        logger.info('Задачу %s призначено на користувача id=%s login=%s',
+                    issue_id_readable,
+                    yt_user_id_resolved,
+                    login)
         return True
 
     logger.debug('YouTrack customFields повернув помилку під час призначення')
-    return False
-
-
-def set_state(issue_id_readable: str, desired_state: str | None) -> bool:
-    """Змінює стан задачі на вказане значення.
-
-    :param issue_id_readable: Короткий ID задачі.
-    :param desired_state: Назва стану, який потрібно встановити.
-    :returns: ``True`` при успішному оновленні, інакше ``False``.
-    """
-    if not desired_state:
-        return True
-
-    issue_id: str | None = get_issue_internal_id(issue_id_readable)
-    if issue_id is None:
-        return False
-
-    fields_optional: CustomFieldMap | None = fetch_issue_custom_fields(issue_id, {YOUTRACK_STATE_FIELD_NAME, 'state'})
-    if not fields_optional:
-        return False
-
-    assert fields_optional is not None
-    fields_map: CustomFieldMap = fields_optional
-
-    state_field: CustomField | None = _pick_field(fields_map, {YOUTRACK_STATE_FIELD_NAME, 'state'})
-    if state_field is None:
-        return False
-
-    project_custom: Mapping[str, object] | dict[str, object] = as_mapping(state_field.get('projectCustomField')) or {}
-    field_id: object | None = project_custom.get('id')
-    if not isinstance(field_id, str):
-        return False
-
-    value_id: str | None = find_state_value_id(state_field, desired_state)
-    if value_id is None:
-        message_missing: str = 'Поле стану або значення не знайдено (field=%s, value=%s)'
-        logger.debug(message_missing, YOUTRACK_STATE_FIELD_NAME, desired_state)
-        return False
-
-    value_payload: dict[str, object] = {'id': value_id}
-    payload: dict[str, object] = {'value': value_payload}
-    if assign_custom_field(issue_id, field_id, payload):
-        logger.info('Оновлено стан задачі %s на "%s"', issue_id_readable, desired_state)
-        return True
-
-    logger.debug('YouTrack customFields повернув помилку під час оновлення стану')
     return False
 
 
@@ -163,9 +136,11 @@ def _resolve_assignee_field_id(issue_id: str, issue_id_readable: str) -> str | N
         logger.error('Поле виконавця не знайдено у задачі %s', issue_id_readable)
         return None
 
-    project_custom: Mapping[str, object] | dict[str, object] = (
-        as_mapping(assignee_field.get('projectCustomField')) or {}
+    project_custom_obj: object | None = assignee_field.get('projectCustomField')
+    project_custom: Mapping[str, object] = (
+        project_custom_obj if isinstance(project_custom_obj, dict) else {}
     )
+    # Переконуються, що у кастомного поля виконавця є ідентифікатор
     field_id: object | None = project_custom.get('id')
     if not isinstance(field_id, str):
         logger.error('ID поля виконавця відсутній у задачі %s', issue_id_readable)
