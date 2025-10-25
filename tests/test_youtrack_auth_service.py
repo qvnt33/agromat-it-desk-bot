@@ -51,7 +51,7 @@ def test_validate_token_success(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_get(url: str, **kwargs: Any) -> FakeResponse:
         assert url.endswith('/api/users/me')
         params: dict[str, object] | None = kwargs.get('params')
-        assert params == {'fields': 'id,login,ringId,fullName,profile(email,username)'}
+        assert params == {'fields': 'id,login,email,ringId,fullName,profile(email,username)'}
         return FakeResponse(200, {'id': 'YT-1', 'login': 'support', 'email': 'user@example.com'})
 
     monkeypatch.setattr(requests, 'get', fake_get)

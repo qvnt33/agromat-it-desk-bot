@@ -8,14 +8,15 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import uvicorn
+from aiogram import Bot, Dispatcher
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.concurrency import run_in_threadpool
 
 from agromat_it_desk_bot.callback_handlers import verify_telegram_secret
-from agromat_it_desk_bot.config import YT_BASE_URL, YT_WEBHOOK_SECRET
+from agromat_it_desk_bot.config import BOT_TOKEN, TELEGRAM_CHAT_ID, YT_BASE_URL, YT_WEBHOOK_SECRET
 from agromat_it_desk_bot.messages import Msg, render
 from agromat_it_desk_bot.telegram import telegram_aiogram, telegram_commands
-from agromat_it_desk_bot.telegram.telegram_service import send_message
+from agromat_it_desk_bot.telegram import context as telegram_context
+from agromat_it_desk_bot.telegram.telegram_sender import AiogramTelegramSender
 from agromat_it_desk_bot.utils import (
     configure_logging,
     extract_issue_id,
@@ -27,6 +28,15 @@ configure_logging()
 logger: logging.Logger = logging.getLogger(__name__)
 
 
+_TELEGRAM_CHAT_ID_RESOLVED: int | str
+if TELEGRAM_CHAT_ID is None:
+    raise RuntimeError('TELEGRAM_CHAT_ID не налаштовано')
+try:
+    _TELEGRAM_CHAT_ID_RESOLVED = int(TELEGRAM_CHAT_ID)
+except ValueError:
+    _TELEGRAM_CHAT_ID_RESOLVED = TELEGRAM_CHAT_ID
+
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Керує запуском та завершенням FastAPI застосунку.
@@ -34,6 +44,15 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     :param _app: Поточний екземпляр FastAPI.
     :yields: ``None`` протягом роботи застосунку.
     """
+    if not BOT_TOKEN:
+        raise RuntimeError('BOT_TOKEN не налаштовано')
+
+    bot: Bot = Bot(token=BOT_TOKEN)
+    dispatcher: Dispatcher = Dispatcher()
+    sender = AiogramTelegramSender(bot)
+    telegram_commands.configure_sender(sender)
+    telegram_aiogram.configure(bot, dispatcher)
+
     try:
         yield
     finally:
@@ -49,8 +68,6 @@ pending_token_updates = telegram_commands.pending_token_updates
 # Сумісність зі старим API
 PendingLoginChange = PendingTokenUpdate
 pending_login_updates = pending_token_updates
-handle_register_command = telegram_commands.handle_register_command
-handle_confirm_login_command = telegram_commands.handle_confirm_login_command
 send_help = telegram_commands.send_help
 handle_start_command = telegram_commands.handle_start_command
 handle_link_command = telegram_commands.handle_link_command
@@ -131,8 +148,14 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:
     issue_label: str = issue_id if issue_id and issue_id != issue_id_unknown_msg else issue_id_unknown_msg
     logger.info('Підготовано повідомлення для задачі %s', issue_label)
 
-    # Запуск синхронної функції send_message() в окремому потоці, щоб не блокувати FastAPI
-    await run_in_threadpool(send_message, telegram_msg, reply_markup)
+    sender = telegram_context.get_sender()
+    await sender.send_message(
+        _TELEGRAM_CHAT_ID_RESOLVED,
+        telegram_msg,
+        parse_mode='HTML',
+        reply_markup=reply_markup,
+        disable_web_page_preview=False,
+    )
     return {'ok': True}
 
 

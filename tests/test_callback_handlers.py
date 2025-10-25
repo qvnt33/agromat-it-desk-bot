@@ -2,49 +2,62 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
 import agromat_it_desk_bot.callback_handlers as handlers
+from agromat_it_desk_bot.messages import Msg, render
+from tests.conftest import FakeTelegramSender
+
+pytestmark = pytest.mark.asyncio
 
 
-def test_handle_accept_assigns_issue(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.fixture()
+def callback_context() -> handlers.CallbackContext:
+    """Створює базовий callback-контекст."""
+    return handlers.CallbackContext('cb-1', 200, 300, 'accept|SUP-1', 555)
+
+
+async def test_handle_accept_assigns_issue(monkeypatch: pytest.MonkeyPatch, fake_sender: FakeTelegramSender, callback_context: handlers.CallbackContext) -> None:
     """Авторизований користувач має призначати задачу та отримувати підтвердження."""
-    payloads: list[dict[str, Any]] = []
-
     monkeypatch.setattr(handlers, 'assign_issue', lambda *_: True)
     monkeypatch.setattr(handlers, 'get_authorized_yt_user', lambda _tg_user_id: ('login', 'mail', 'YT-1'))
+    allowed_calls: set[int] = {callback_context.tg_user_id or -1}
 
-    def fake_call_api(method: str, payload: dict[str, Any]) -> None:
-        payloads.append({'method': method, 'payload': payload})
+    async def fake_is_user_allowed(tg_user_id: int | None) -> bool:
+        return tg_user_id in allowed_calls
 
-    monkeypatch.setattr(handlers, 'call_api', fake_call_api)
-    monkeypatch.setattr(handlers, 'remove_keyboard', lambda *_: None)
+    monkeypatch.setattr(handlers, 'is_user_allowed', fake_is_user_allowed, raising=False)
 
-    context = handlers.CallbackContext('cb-1', 200, 300, 'accept|SUP-1', 555)
-    handlers.handle_accept('SUP-1', context)
+    await handlers.handle_accept('SUP-1', callback_context)
 
-    answers = [entry for entry in payloads if entry['method'] == 'answerCallbackQuery']
-    assert answers, 'Очікував відповідь answerCallbackQuery'
-    assert any(payload['payload'].get('text') == 'Прийнято ✅' for payload in answers)
+    assert any(answer['text'] == render(Msg.CALLBACK_ACCEPTED) for answer in fake_sender.callback_answers)
+    assert fake_sender.edited_markup[-1] == {'chat_id': 200, 'message_id': 300, 'reply_markup': {}}
 
 
-def test_handle_accept_fails_for_unknown_user(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_handle_accept_fails_for_unknown_user(monkeypatch: pytest.MonkeyPatch, fake_sender: FakeTelegramSender, callback_context: handlers.CallbackContext) -> None:
     """Якщо користувача не знайдено, бот показує помилку."""
-    captured: list[dict[str, Any]] = []
-
     monkeypatch.setattr(handlers, 'assign_issue', lambda *_: True)
     monkeypatch.setattr(handlers, 'get_authorized_yt_user', lambda _tg_user_id: (None, None, None))
 
-    def fake_call_api(method: str, payload: dict[str, Any]) -> None:
-        captured.append({'method': method, 'payload': payload})
+    await handlers.handle_accept('SUP-2', callback_context)
 
-    monkeypatch.setattr(handlers, 'call_api', fake_call_api)
+    assert any(answer['text'] == render(Msg.ERR_CALLBACK_ASSIGN_ERROR) for answer in fake_sender.callback_answers)
 
-    context = handlers.CallbackContext('cb-2', 201, 301, 'accept|SUP-2', 556)
-    handlers.handle_accept('SUP-2', context)
 
-    errors = [entry for entry in captured if entry['method'] == 'answerCallbackQuery']
-    assert errors, 'Очікував повідомлення про помилку'
-    assert any(entry['payload'].get('text') == 'Помилка: не вдалось прийняти' for entry in errors)
+async def test_handle_accept_duplicate_is_idempotent(monkeypatch: pytest.MonkeyPatch, fake_sender: FakeTelegramSender, callback_context: handlers.CallbackContext) -> None:
+    """Повторний callback не викликає повторного assign_issue, але відповідає успіхом."""
+    calls: list[str] = []
+
+    def fake_assign(issue_id: str, *_: object) -> bool:
+        calls.append(issue_id)
+        return True
+
+    monkeypatch.setattr(handlers, 'assign_issue', fake_assign, raising=False)
+    monkeypatch.setattr(handlers, 'get_authorized_yt_user', lambda _tg_user_id: ('login', 'mail', 'YT-1'))
+
+    await handlers.handle_accept('SUP-3', callback_context)
+    await handlers.handle_accept('SUP-3', callback_context)
+
+    assert calls == ['SUP-3']
+    successes = [answer for answer in fake_sender.callback_answers if answer['text'] == render(Msg.CALLBACK_ACCEPTED)]
+    assert len(successes) >= 2

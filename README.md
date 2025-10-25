@@ -87,7 +87,7 @@
 - `login` / `email` — використовуються для пошуку користувача, якщо `id` не задано.
 - Строкове значення (`"support.engineer"`) інтерпретується як логін.
 
-Користувачі можуть додавати себе в мапу напряму з Telegram, надіславши `/register <логін>`. Бот автоматично знайде відповідний обліковий запис у YouTrack і збереже `login`, `email` та `id` у `user_map.json`. Логін та YouTrack ID мають бути унікальними — якщо вони вже привʼязані до іншого Telegram ID, реєстрацію буде відхилено. Для зміни логіна спершу виконайте `/register <новий_логін>`, після чого бот попросить підтвердити дію командою `/confirm_login <новий_логін>`.
+Користувачів можна додавати вручну, редагуючи `user_map.json`.
 
 ### YouTrack workflow
 У каталозі `webhooks/` є `yt2tg-webhook-app.zip` для інтеграції:
@@ -179,7 +179,7 @@ agromat_it_desk_bot/
 ├─ telegram/
 │  ├─ __init__.py
 │  ├─ telegram_aiogram.py # Router/Dispatcher Aiogram, обробка message + callback
-│  ├─ telegram_commands.py # Бізнес-логіка команд /register та /confirm_login
+│  ├─ telegram_commands.py # Бізнес-логіка Telegram команд
 │  └─ telegram_service.py # Синхронні виклики Telegram Bot API
 ├─ youtrack/
 │  ├─ __init__.py

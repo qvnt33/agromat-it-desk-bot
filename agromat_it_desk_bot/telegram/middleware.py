@@ -32,12 +32,15 @@ class AuthorizationMiddleware(BaseMiddleware):
                 return await handler(event, data)
 
             tg_user_id: int | None = event.from_user.id if event.from_user else None
-            if tg_user_id is None or is_authorized(tg_user_id):
+            if tg_user_id is None:
+                return await handler(event, data)
+            authorized: bool = await asyncio.to_thread(is_authorized, tg_user_id)
+            if authorized:
                 return await handler(event, data)
 
             chat_id: int | None = event.chat.id if event.chat else None
             if chat_id is not None:
-                await asyncio.to_thread(notify_authorization_required, chat_id)
+                await notify_authorization_required(chat_id)
             return None
 
         return await handler(event, data)

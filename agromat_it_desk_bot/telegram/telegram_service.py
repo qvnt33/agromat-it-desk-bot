@@ -29,7 +29,7 @@ def send_message(text: str, reply_markup: dict[str, Any] | None = None) -> None:
         'chat_id': TELEGRAM_CHAT_ID,
         'text': text,
         'disable_web_page_preview': True,
-        'parse_mode': 'Markdown',
+        'parse_mode': 'HTML',
     }
     logger.debug('Відправлення повідомлення: chat_id=%s length=%s', TELEGRAM_CHAT_ID, len(text))
     if reply_markup is not None:

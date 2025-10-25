@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from collections import deque
 from typing import Any, NamedTuple
 
 from fastapi import HTTPException, Request
@@ -10,10 +12,15 @@ from fastapi import HTTPException, Request
 from agromat_it_desk_bot.auth import get_authorized_yt_user, is_authorized
 from agromat_it_desk_bot.config import ALLOWED_TG_USER_IDS, TELEGRAM_WEBHOOK_SECRET
 from agromat_it_desk_bot.messages import Msg, render
-from agromat_it_desk_bot.telegram.telegram_service import call_api
+from agromat_it_desk_bot.telegram import context as telegram_context
+from agromat_it_desk_bot.telegram.telegram_sender import TelegramSender
 from agromat_it_desk_bot.youtrack.youtrack_service import assign_issue
 
 logger: logging.Logger = logging.getLogger(__name__)
+_processed_accept_keys: set[str] = set()
+_processed_queue: deque[str] = deque()
+_processed_lock: asyncio.Lock = asyncio.Lock()
+_PROCESSED_LIMIT: int = 512
 
 
 class CallbackContext(NamedTuple):
@@ -91,7 +98,7 @@ def parse_callback_payload(payload: Any) -> CallbackContext | None:
     return context
 
 
-def is_user_allowed(tg_user_id: int | None) -> bool:
+async def is_user_allowed(tg_user_id: int | None) -> bool:
     """Перевіряє, чи має користувач право натискати кнопку "Прийняти".
 
     :param tg_user_id: Telegram ID користувача.
@@ -100,7 +107,8 @@ def is_user_allowed(tg_user_id: int | None) -> bool:
     if tg_user_id is None:
         return False
 
-    if not is_authorized(tg_user_id):
+    authorized: bool = await asyncio.to_thread(is_authorized, tg_user_id)
+    if not authorized:
         logger.debug('Користувача не авторизовано: tg_user_id=%s', tg_user_id)
         return False
 
@@ -126,7 +134,7 @@ def parse_action(payload: str) -> tuple[str, str | None]:
     return action, issue_id or None
 
 
-def handle_accept(issue_id: str, context: CallbackContext) -> None:
+async def handle_accept(issue_id: str, context: CallbackContext) -> None:
     """Призначає задачу в YouTrack та відповідає користувачу.
 
     :param issue_id: Читабельний ID задачі.
@@ -134,78 +142,80 @@ def handle_accept(issue_id: str, context: CallbackContext) -> None:
     """
     if context.tg_user_id is None:
         logger.warning('Callback без ідентифікатора користувача: issue_id=%s', issue_id)
-        reply_assign_error(context.callback_id)
+        await reply_assign_error(context.callback_id)
         return
 
-    login: str | None
-    email: str | None
-    yt_user_id: str | None
+    key: str = f'{context.chat_id}:{context.message_id}:{issue_id}'
+    is_new: bool = await _register_accept_attempt(key)
+    if not is_new:
+        logger.info('Ігнорують дубль callback для %s', key)
+        await reply_success(context.callback_id)
+        return
+
     try:
-        login, email, yt_user_id = get_authorized_yt_user(context.tg_user_id)
+        login, email, yt_user_id = await asyncio.to_thread(get_authorized_yt_user, context.tg_user_id)
         if not any((login, email, yt_user_id)):
             raise RuntimeError('Не знайдено мапінг користувача')
     except Exception as exc:  # noqa: BLE001
         logger.exception('Не вдалося знайти користувача для прийняття: %s', exc)
-        reply_assign_error(context.callback_id)
+        await reply_assign_error(context.callback_id)
         return
 
-    assigned: bool = assign_issue(issue_id, login, email, yt_user_id)
+    assigned: bool = await asyncio.to_thread(assign_issue, issue_id, login, email, yt_user_id)
     if not assigned:
-        reply_assign_failed(context.callback_id)
+        await reply_assign_failed(context.callback_id)
         logger.warning('Не вдалося призначити задачу через callback: issue_id=%s', issue_id)
         return
 
-    reply_success(context.callback_id)
-    remove_keyboard(context.chat_id, context.message_id)
+    await reply_success(context.callback_id)
+    await remove_keyboard(context.chat_id, context.message_id)
     logger.info('Задачу призначено через callback: issue_id=%s tg_user_id=%s', issue_id, context.tg_user_id)
 
 
-def reply_insufficient_rights(callback_id: str) -> None:
+async def reply_insufficient_rights(callback_id: str) -> None:
     """Повідомляє про відсутність прав у користувача."""
-    payload: dict[str, object] = {
-        'callback_query_id': callback_id,
-        'text': render(Msg.ERR_CALLBACK_RIGHTS),
-        'show_alert': True,
-    }
-    call_api('answerCallbackQuery', payload)
+    await _sender().answer_callback(callback_id, text=render(Msg.ERR_CALLBACK_RIGHTS), show_alert=True)
 
 
-def reply_unknown_action(callback_id: str) -> None:
+async def reply_unknown_action(callback_id: str) -> None:
     """Відповідає на невідому дію callback-даних."""
-    call_api(
-        'answerCallbackQuery',
-        {'callback_query_id': callback_id, 'text': render(Msg.ERR_CALLBACK_UNKNOWN)},
-    )
+    await _sender().answer_callback(callback_id, text=render(Msg.ERR_CALLBACK_UNKNOWN))
 
 
-def reply_success(callback_id: str) -> None:
+async def reply_success(callback_id: str) -> None:
     """Підтверджує користувачу успішне призначення."""
-    call_api(
-        'answerCallbackQuery',
-        {'callback_query_id': callback_id, 'text': render(Msg.CALLBACK_ACCEPTED)},
-    )
+    await _sender().answer_callback(callback_id, text=render(Msg.CALLBACK_ACCEPTED))
 
 
-def reply_assign_failed(callback_id: str) -> None:
+async def reply_assign_failed(callback_id: str) -> None:
     """Повідомляє про невдалу спробу призначення."""
-    payload: dict[str, object] = {
-        'callback_query_id': callback_id,
-        'text': render(Msg.ERR_CALLBACK_ASSIGN_FAILED),
-        'show_alert': True,
-    }
-    call_api('answerCallbackQuery', payload)
+    await _sender().answer_callback(callback_id, text=render(Msg.ERR_CALLBACK_ASSIGN_FAILED), show_alert=True)
 
 
-def reply_assign_error(callback_id: str) -> None:
+async def reply_assign_error(callback_id: str) -> None:
     """Показує системну помилку під час прийняття."""
-    payload: dict[str, object] = {
-        'callback_query_id': callback_id,
-        'text': render(Msg.ERR_CALLBACK_ASSIGN_ERROR),
-        'show_alert': True,
-    }
-    call_api('answerCallbackQuery', payload)
+    await _sender().answer_callback(callback_id, text=render(Msg.ERR_CALLBACK_ASSIGN_ERROR), show_alert=True)
 
 
-def remove_keyboard(chat_id: int, message_id: int) -> None:
+async def remove_keyboard(chat_id: int, message_id: int) -> None:
     """Прибирає клавіатуру з повідомлення Telegram після успішного прийняття."""
-    call_api('editMessageReplyMarkup', {'chat_id': chat_id, 'message_id': message_id, 'reply_markup': {}})
+    try:
+        await _sender().edit_reply_markup(chat_id, message_id, {})
+    except Exception as exc:  # noqa: BLE001
+        logger.debug('Не вдалося прибрати клавіатуру: %s', exc)
+
+
+def _sender() -> TelegramSender:
+    return telegram_context.get_sender()
+
+
+async def _register_accept_attempt(key: str) -> bool:
+    async with _processed_lock:
+        if key in _processed_accept_keys:
+            return False
+        _processed_accept_keys.add(key)
+        _processed_queue.append(key)
+        while len(_processed_queue) > _PROCESSED_LIMIT:
+            expired: str = _processed_queue.popleft()
+            _processed_accept_keys.discard(expired)
+        return True

@@ -12,11 +12,6 @@ class Msg(str, Enum):
     """
 
     # Інформаційні повідомлення
-    HELP_REGISTER = 'help.register'
-    REGISTER_ALREADY = 'register.already'
-    REGISTER_PROMPT_CONFIRM = 'register.prompt_confirm'
-    REGISTER_SAVED = 'register.saved'
-    REGISTER_UPDATED_NOTE = 'register.updated_note'
     AUTH_WELCOME = 'auth.welcome'
     AUTH_HELP = 'auth.help'
     AUTH_BUTTON_TEXT = 'auth.button_text'
@@ -53,8 +48,6 @@ class Msg(str, Enum):
     UNLINK_CANCELLED = 'unlink.cancelled'
 
     # Помилки та попередження
-    ERR_REGISTER_FORMAT = 'err.register_format'
-    ERR_CONFIRM_FORMAT = 'err.confirm_format'
     ERR_TG_ID_UNAVAILABLE = 'err.tg_id_unavailable'
     ERR_LOGIN_TAKEN = 'err.login_taken'
     ERR_CONFIRM_MISMATCH = 'err.confirm_mismatch'

@@ -7,7 +7,6 @@ import logging
 from datetime import datetime, timezone
 from enum import Enum
 from threading import Lock
-from typing import cast
 
 from agromat_it_desk_bot.storage import deactivate_user as storage_deactivate_user
 from agromat_it_desk_bot.storage import (
@@ -86,7 +85,7 @@ def register_user(tg_user_id: int, token_plain: str) -> RegistrationOutcome:
     owner_record = fetch_user_by_yt_id(yt_user_id)
     outcome: RegistrationOutcome = RegistrationOutcome.SUCCESS
     if owner_record is not None:
-        owner_tg_id = int(owner_record['tg_user_id'])
+        owner_tg_id = int(owner_record['tg_user_id'])  # type: ignore
         if owner_tg_id != tg_user_id:
             logger.info(
                 'YouTrack акаунт вже привʼязано: tg_user_id=%s yt_user_id=%s власник=%s',
@@ -95,7 +94,8 @@ def register_user(tg_user_id: int, token_plain: str) -> RegistrationOutcome:
                 owner_tg_id,
             )
             return RegistrationOutcome.FOREIGN_OWNER
-        stored_hash = cast(str | None, owner_record.get('token_hash'))
+        stored_hash_obj: object | None = owner_record.get('token_hash')
+        stored_hash: str | None = stored_hash_obj if isinstance(stored_hash_obj, str) else None
         if stored_hash and stored_hash == token_hash:
             logger.debug(
                 'Токен не змінено: tg_user_id=%s yt_user_id=%s',
@@ -107,8 +107,12 @@ def register_user(tg_user_id: int, token_plain: str) -> RegistrationOutcome:
     existing_record = fetch_user_by_tg_id(tg_user_id)
     registered_at: str = now
     if existing_record is not None:
-        stored_registered = cast(str | None, existing_record.get('registered_at'))
-        stored_created = cast(str | None, existing_record.get('created_at'))
+        stored_registered_obj: object | None = existing_record.get('registered_at')
+        stored_registered: str | None = (
+            stored_registered_obj if isinstance(stored_registered_obj, str) else None
+        )
+        stored_created_obj: object | None = existing_record.get('created_at')
+        stored_created: str | None = stored_created_obj if isinstance(stored_created_obj, str) else None
         if stored_registered:
             registered_at = stored_registered
         elif stored_created:
