@@ -48,14 +48,12 @@ __all__ = [
     'CALLBACK_UNLINK_NO',
     'handle_start_command',
     'handle_connect_command',
-    'handle_link_command',
     'handle_reconnect_shortcut',
     'handle_unlink_decision',
     'handle_confirm_reconnect',
     'handle_unlink_command',
     'handle_token_submission',
     'notify_authorization_required',
-    'send_help',
     'configure_sender',
 ]
 
@@ -98,14 +96,6 @@ async def handle_start_command(chat_id: int, message: Mapping[str, object]) -> N
     await _reply(chat_id, text)
 
 
-async def send_help(chat_id: int) -> None:
-    """Нагадує, як надіслати токен для підключення.
-
-    :param chat_id: Ідентифікатор чату Telegram.
-    """
-    await _reply(chat_id, render(Msg.CONNECT_HELP))
-
-
 async def handle_connect_command(chat_id: int, message: Mapping[str, object], text: str) -> None:
     """Приймає токен з команди ``/connect`` та виконує підключення чи оновлення.
 
@@ -129,18 +119,6 @@ async def handle_connect_command(chat_id: int, message: Mapping[str, object], te
         return
 
     await _prepare_token_update(chat_id, tg_user_id, token)
-
-
-async def handle_link_command(chat_id: int, message: Mapping[str, object], text: str) -> None:
-    """Обробляє застарілу команду ``/link``, перенаправляючи на ``/connect``.
-
-    :param chat_id: Ідентифікатор чату Telegram.
-    :param message: Повідомлення Telegram у вигляді словника.
-    :param text: Повний текст команди.
-    """
-    logger.debug('Перенаправлено /link на /connect: chat_id=%s', chat_id)
-    adapted_text: str = text.replace('/link', '/connect', 1) if text.startswith('/link') else text
-    await handle_connect_command(chat_id, message, adapted_text)
 
 
 async def handle_reconnect_shortcut(chat_id: int) -> None:

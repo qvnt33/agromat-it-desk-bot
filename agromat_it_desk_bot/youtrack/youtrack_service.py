@@ -11,9 +11,9 @@ from .youtrack_client import (
     YouTrackUser,
     assign_custom_field,
     fetch_issue_custom_fields,
+    find_state_value_id,
     find_user,
     find_user_id,
-    find_state_value_id,
     get_issue_internal_id,
 )
 

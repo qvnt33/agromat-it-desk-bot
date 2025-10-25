@@ -18,13 +18,11 @@ from agromat_it_desk_bot.telegram.telegram_commands import (
     CALLBACK_UNLINK_NO,
     handle_confirm_reconnect,
     handle_connect_command,
-    handle_link_command,
     handle_reconnect_shortcut,
     handle_start_command,
     handle_token_submission,
     handle_unlink_command,
     handle_unlink_decision,
-    send_help,
 )
 
 if TYPE_CHECKING:
@@ -33,7 +31,7 @@ if TYPE_CHECKING:
 logger: logging.Logger = logging.getLogger(__name__)
 
 _router: Router = Router()
-_router.message.middleware(AuthorizationMiddleware({'start', 'help', 'connect', 'link', 'unlink'}))
+_router.message.middleware(AuthorizationMiddleware({'start', 'connect', 'unlink'}))
 _bot: Bot | None = None
 _dispatcher: Dispatcher | None = None
 _router_registered: bool = False
@@ -78,15 +76,6 @@ async def _on_start(message: Message) -> None:
     await handle_start_command(chat_id, payload)
 
 
-async def _on_help(message: Message) -> None:
-    """Пояснює процедуру привʼязки токена."""
-    chat_id: int | None = message.chat.id if message.chat else None
-    if chat_id is None:
-        logger.debug('Невідомий chat_id для /help: %s', message.model_dump(mode='python'))
-        return
-    await send_help(chat_id)
-
-
 async def _on_connect(message: Message) -> None:
     """Обробляє команду /connect."""
     chat_id: int | None = message.chat.id if message.chat else None
@@ -96,17 +85,6 @@ async def _on_connect(message: Message) -> None:
         return
     payload: dict[str, object] = message.model_dump(mode='python')
     await handle_connect_command(chat_id, payload, text)
-
-
-async def _on_link(message: Message) -> None:
-    """Обробляє команду /link."""
-    chat_id: int | None = message.chat.id if message.chat else None
-    text: str | None = message.text
-    if chat_id is None or text is None:
-        logger.debug('Пропущено /link: chat_id=%s text=%s', chat_id, text)
-        return
-    payload: dict[str, object] = message.model_dump(mode='python')
-    await handle_link_command(chat_id, payload, text)
 
 
 async def _on_unlink(message: Message) -> None:
@@ -246,9 +224,7 @@ async def _on_accept_issue_callback(query: CallbackQuery) -> None:
 
 
 _router.message(CommandStart())(_on_start)
-_router.message(Command(commands=['help']))(_on_help)
 _router.message(Command(commands=['connect']))(_on_connect)
-_router.message(Command(commands=['link']))(_on_link)
 _router.message(Command(commands=['unlink']))(_on_unlink)
 _router.callback_query(F.data == CALLBACK_RECONNECT_START)(_on_reconnect_shortcut_callback)
 _router.callback_query(F.data == CALLBACK_CONFIRM_YES)(_on_confirm_yes)

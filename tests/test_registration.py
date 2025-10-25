@@ -1,4 +1,4 @@
-"""Перевіряє сумісність застарілих Telegram-команд."""
+"""Перевіряє допоміжні відповіді для Telegram."""
 
 from __future__ import annotations
 
@@ -9,36 +9,6 @@ from agromat_it_desk_bot.messages import Msg, render
 from tests.conftest import FakeTelegramSender
 
 pytestmark = pytest.mark.asyncio
-
-
-def build_message(tg_user_id: int, text: str) -> dict[str, object]:
-    """Формує мінімальний payload повідомлення Telegram."""
-    return {
-        'chat': {'id': 123, 'type': 'private'},
-        'from': {'id': tg_user_id},
-        'from_user': {'id': tg_user_id},
-        'text': text,
-    }
-
-
-async def test_handle_link_command_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Команда /link повторно використовує логіку /connect."""
-    captured: tuple[int, dict[str, object], str] | None = None
-
-    async def fake_connect(chat_id: int, message: dict[str, object], text: str) -> None:
-        nonlocal captured
-        captured = (chat_id, message, text)
-
-    monkeypatch.setattr(telegram_commands, 'handle_connect_command', fake_connect, raising=False)
-
-    message = build_message(111, '/link token-legacy')
-    await telegram_commands.handle_link_command(123, message, '/link token-legacy')
-
-    assert captured is not None
-    chat_id, payload, text = captured
-    assert chat_id == 123
-    assert payload['text'] == '/link token-legacy'
-    assert text.startswith('/connect ')
 
 
 async def test_handle_reconnect_shortcut_sends_prompt(fake_sender: FakeTelegramSender) -> None:

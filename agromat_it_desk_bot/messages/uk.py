@@ -22,7 +22,6 @@ UK: Mapping[Msg, str] = {
         'Для відʼєднання скористайся /unlink.'
     ),
     Msg.CONNECT_GUIDE_BUTTON: 'Як отримати токен',
-    Msg.CONNECT_HELP: '👋 Щоб почати роботу, надішли свій <b>YouTrack токен</b> командою /connect <code>&lt;токен&gt;</code>.',
     Msg.CONNECT_EXPECTS_TOKEN: '📋 <b>Формат:</b> /connect <code>&lt;токен&gt;</code>.',
     Msg.CONNECT_SUCCESS_NEW: '🚀 Готово! Тебе підключено до YouTrack',
     Msg.CONNECT_SUCCESS_UPDATED: '🔄 Токен успішно оновлено.',
@@ -35,6 +34,13 @@ UK: Mapping[Msg, str] = {
     Msg.CONNECT_FAILURE_INVALID: '❌ Токен недійсний або користувача немає в проєкті.',
     Msg.CONNECT_ALREADY_LINKED: '🚫 Цей YouTrack-акаунт уже привʼязаний до іншого Telegram.',
     Msg.CONNECT_ALREADY_CONNECTED: '🟢 Ти вже підключений до цього акаунта – нічого змінювати не потрібно.',
+    Msg.TELEGRAM_ISSUE: (
+        '{issue_link} – {summary}\n'
+        'Автор: <code>{author}</code>\n'
+        'Статус: <code>{status}</code>\n'
+        'Виконавець: <code>{assignee}</code>\n\n'
+        '{description}'
+    ),
     Msg.UNLINK_CONFIRM_PROMPT: '⚙️ Відʼєднати цей YouTrack-акаунт?',
     Msg.UNLINK_CONFIRM_YES_BUTTON: '✅ Так, відʼєднати',
     Msg.UNLINK_CONFIRM_NO_BUTTON: '🚫 Залишити як є',

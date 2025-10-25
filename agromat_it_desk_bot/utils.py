@@ -10,7 +10,7 @@ from html import escape
 from pathlib import Path
 from typing import Any, TypedDict
 
-from agromat_it_desk_bot.config import DESCRIPTION_MAX_LEN, TELEGRAM_MAIN_MESSAGE_TEMPLATE, USER_MAP_FILE
+from agromat_it_desk_bot.config import DESCRIPTION_MAX_LEN, USER_MAP_FILE
 from agromat_it_desk_bot.messages import Msg, render
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -83,12 +83,17 @@ def extract_issue_id(issue: Mapping[str, object]) -> str:
     return issue_id_unknown_msg
 
 
-def format_telegram_message(issue_id: str,
-                            summary_raw: str,
-                            description_raw: str,
-                            url: str) -> str:
+def format_telegram_message(
+    issue_id: str,
+    summary_raw: str,
+    description_raw: str,
+    url: str,
+    *,
+    author: str | None = None,
+    status: str | None = None,
+    assignee: str | None = None,
+) -> str:
     """Формує HTML-повідомлення для Telegram."""
-    # Екранований ID задачі для HTML
     formatted_issue_id: str = escape(issue_id)
     summary: str = escape(summary_raw)
     description: str = escape(description_raw)
@@ -98,11 +103,28 @@ def format_telegram_message(issue_id: str,
     elif len(description) > DESCRIPTION_MAX_LEN:
         description = f'{description[:DESCRIPTION_MAX_LEN]}…'
 
-    telegram_msg: str = TELEGRAM_MAIN_MESSAGE_TEMPLATE.format(issue_id=formatted_issue_id,
-                                                              summary=summary,
-                                                              url=url,
-                                                              description=description)
-    return telegram_msg
+    def _format_person(value: str | None) -> str:
+        cleaned: str = (value or '').strip()
+        return escape(cleaned) if cleaned else '—'
+
+    author_text: str = _format_person(author)
+    assignee_text: str = _format_person(assignee)
+    status_clean: str = (status or '').strip()
+    status_text: str = escape(status_clean) if status_clean else '—'
+
+    issue_label: str = f'Заявка {formatted_issue_id}'
+    if isinstance(url, str) and url.startswith('http'):
+        issue_label = f'<a href="{escape(url, quote=True)}">{issue_label}</a>'
+
+    return render(
+        Msg.TELEGRAM_ISSUE,
+        issue_link=issue_label,
+        summary=summary,
+        author=author_text,
+        status=status_text,
+        assignee=assignee_text,
+        description=description,
+    )
 
 
 def resolve_from_map(tg_user_id: int | None) -> tuple[str | None, str | None, str | None]:

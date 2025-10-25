@@ -85,7 +85,7 @@ def register_user(tg_user_id: int, token_plain: str) -> RegistrationOutcome:
     owner_record = fetch_user_by_yt_id(yt_user_id)
     outcome: RegistrationOutcome = RegistrationOutcome.SUCCESS
     if owner_record is not None:
-        owner_tg_id = int(owner_record['tg_user_id'])  # type: ignore
+        owner_tg_id = int(owner_record['tg_user_id'])
         if owner_tg_id != tg_user_id:
             logger.info(
                 'YouTrack акаунт вже привʼязано: tg_user_id=%s yt_user_id=%s власник=%s',

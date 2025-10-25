@@ -7,13 +7,11 @@ from .telegram_commands import (
     configure_sender,
     handle_confirm_reconnect,
     handle_connect_command,
-    handle_link_command,
     handle_reconnect_shortcut,
     handle_start_command,
     handle_unlink_command,
     handle_unlink_decision,
     notify_authorization_required,
-    send_help,
 )
 
 # Публічний API telegram-пакета
@@ -24,11 +22,9 @@ __all__ = [
     'configure_sender',
     'handle_confirm_reconnect',
     'handle_connect_command',
-    'handle_link_command',
     'handle_reconnect_shortcut',
     'handle_start_command',
     'handle_unlink_command',
     'handle_unlink_decision',
-    'send_help',
     'notify_authorization_required',
 ]

@@ -68,9 +68,7 @@ pending_token_updates = telegram_commands.pending_token_updates
 # Сумісність зі старим API
 PendingLoginChange = PendingTokenUpdate
 pending_login_updates = pending_token_updates
-send_help = telegram_commands.send_help
 handle_start_command = telegram_commands.handle_start_command
-handle_link_command = telegram_commands.handle_link_command
 handle_unlink_command = telegram_commands.handle_unlink_command
 handle_connect_command = telegram_commands.handle_connect_command
 handle_reconnect_command = telegram_commands.handle_connect_command  # зворотна сумісність
