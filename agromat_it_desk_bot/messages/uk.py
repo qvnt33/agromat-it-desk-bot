@@ -9,6 +9,7 @@ from .keys import Msg
 # Зберігають сталі текстові шаблони для локалі ``uk``
 UK: Mapping[Msg, str] = {
     # Інформаційні повідомлення
+    Msg.NOT_ASSIGNED: '[не призначено]',
     Msg.CALLBACK_ACCEPTED: 'Прийнято ✅',
     Msg.TG_BTN_ACCEPT_ISSUE: 'Прийняти',
     Msg.YT_ISSUE_NO_ID: '(без ID)',
@@ -35,10 +36,10 @@ UK: Mapping[Msg, str] = {
     Msg.CONNECT_ALREADY_LINKED: '🚫 Цей YouTrack-акаунт уже привʼязаний до іншого Telegram.',
     Msg.CONNECT_ALREADY_CONNECTED: '🟢 Ти вже підключений до цього акаунта – нічого змінювати не потрібно.',
     Msg.TELEGRAM_ISSUE: (
-        '{issue_link} – {summary}\n'
-        'Автор: <code>{author}</code>\n'
-        'Статус: <code>{status}</code>\n'
-        'Виконавець: <code>{assignee}</code>\n\n'
+        '{issue_link} – <b>{summary}</b>\n\n'
+        '<b>Автор:</b> <code>{author}</code>\n'
+        '<b>Статус:</b> <code>{status}</code>\n'
+        '<b>Виконавець:</b> <code>{assignee}</code>\n\n'
         '{description}'
     ),
     Msg.UNLINK_CONFIRM_PROMPT: '⚙️ Відʼєднати цей YouTrack-акаунт?',

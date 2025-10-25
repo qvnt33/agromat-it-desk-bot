@@ -14,8 +14,8 @@ from fastapi import FastAPI, HTTPException, Request
 from agromat_it_desk_bot.callback_handlers import verify_telegram_secret
 from agromat_it_desk_bot.config import BOT_TOKEN, TELEGRAM_CHAT_ID, YT_BASE_URL, YT_WEBHOOK_SECRET
 from agromat_it_desk_bot.messages import Msg, render
-from agromat_it_desk_bot.telegram import telegram_aiogram, telegram_commands
 from agromat_it_desk_bot.telegram import context as telegram_context
+from agromat_it_desk_bot.telegram import telegram_aiogram, telegram_commands
 from agromat_it_desk_bot.telegram.telegram_sender import AiogramTelegramSender
 from agromat_it_desk_bot.utils import (
     configure_logging,
@@ -109,6 +109,47 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:
     summary: str = get_str(issue, 'summary')
     description: str = get_str(issue, 'description')
 
+    # Дані з оновленого workflow-пейлоада (з фолбеками)
+    author: str = get_str(issue, 'author')
+    if not author:
+        rep_obj = issue.get('reporter')
+        if isinstance(rep_obj, dict):
+            author = (rep_obj.get('fullName') or rep_obj.get('login') or '')  # type: ignore[assignment]
+
+    status_name: str = get_str(issue, 'status')
+
+    assignee_label: str = get_str(issue, 'assignee') or render(Msg.NOT_ASSIGNED)
+
+    # Якщо полів немає в payload, спробувати дістати з customFields (старі вебхуки)
+    if not status_name or assignee_label == render(Msg.YT_ISSUE_NO_ID):
+        cfs = issue.get('customFields')
+        if isinstance(cfs, list):
+            for cf in cfs:
+                if not isinstance(cf, dict):
+                    continue
+                nm = cf.get('name')
+                if nm in ('Статус', 'State') and not status_name:
+                    v = cf.get('value')
+                    if isinstance(v, dict):
+                        n = v.get('name')
+                        if isinstance(n, str) and n:
+                            status_name = n
+                if nm in ('Assignee', 'Assignees', 'Виконавець', 'Виконавці') and assignee_label == render(Msg.YT_ISSUE_NO_ID):
+                    v = cf.get('value')
+                    names: list[str] = []
+                    if isinstance(v, dict):
+                        val = v.get('fullName') or v.get('login') or v.get('name')
+                        if isinstance(val, str) and val:
+                            names = [val]
+                    elif isinstance(v, list):
+                        for u in v:
+                            if isinstance(u, dict):
+                                val = u.get('fullName') or u.get('login') or u.get('name')
+                                if isinstance(val, str) and val:
+                                    names.append(val)
+                    if names:
+                        assignee_label = ', '.join(names)
+
     logger.debug('YouTrack webhook: issue_id=%s summary=%s', issue_id, summary)
 
     url_val: str | None = None  # Посилання на задачу для повідомлення
@@ -127,10 +168,15 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:
         url_val = render(Msg.ERR_YT_ISSUE_NO_URL)
     logger.debug('YouTrack webhook: resolved_url=%s', url_val)
 
-    telegram_msg: str = format_telegram_message(issue_id,
-                                                summary,
-                                                description,
-                                                url_val)
+    telegram_msg: str = format_telegram_message(
+        issue_id,
+        summary,
+        description,
+        url_val,
+        author=author,
+        status=status_name,
+        assignee=assignee_label,
+    )
     logger.debug('YouTrack webhook: message_length=%s', len(telegram_msg))
 
     # Inline-клавіатура з кнопкою прийняття

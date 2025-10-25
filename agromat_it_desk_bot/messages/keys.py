@@ -12,6 +12,7 @@ class Msg(str, Enum):
     """
 
     # Інформаційні повідомлення
+    NOT_ASSIGNED = 'msg.not_assigned'
     AUTH_WELCOME = 'auth.welcome'
     AUTH_HELP = 'auth.help'
     AUTH_BUTTON_TEXT = 'auth.button_text'
