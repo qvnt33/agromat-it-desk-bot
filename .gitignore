@@ -128,3 +128,4 @@ database.db
 test.py
 user_map.json
 AGENTS.md
+bot.sqlite3
