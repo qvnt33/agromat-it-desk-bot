@@ -13,23 +13,33 @@ from .youtrack_client import (
     fetch_issue_custom_fields,
     find_user,
     find_user_id,
+    find_state_value_id,
     get_issue_internal_id,
 )
 
-from agromat_it_desk_bot.config import YOUTRACK_ASSIGNEE_FIELD_NAME
-from agromat_it_desk_bot.utils import resolve_from_map
+from agromat_it_desk_bot.auth import get_authorized_yt_user
+from agromat_it_desk_bot.config import (
+    YOUTRACK_ASSIGNEE_FIELD_NAME,
+    YOUTRACK_STATE_FIELD_NAME,
+    YOUTRACK_STATE_IN_PROGRESS,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger: logging.Logger = logging.getLogger(__name__)
 
 
 def resolve_account(tg_user_id: int | None) -> tuple[str | None, str | None, str | None]:
-    """Визначає користувача YouTrack за TG ID через локальну мапу.
+    """Повертає дані авторизованого користувача YouTrack за Telegram ID.
 
     :param tg_user_id: Telegram ID користувача.
     :returns: Логін, email та внутрішній ID користувача YouTrack.
     """
-    return resolve_from_map(tg_user_id)
+    if tg_user_id is None:
+        logger.debug('resolve_account викликано без tg_user_id')
+        return None, None, None
+    login, email, yt_user_id = get_authorized_yt_user(tg_user_id)
+    logger.debug('resolve_account: tg_user_id=%s yt_user_id=%s', tg_user_id, yt_user_id)
+    return login, email, yt_user_id
 
 
 def assign_issue(issue_id_readable: str, login: str | None, email: str | None, user_id: str | None) -> bool:
@@ -76,6 +86,7 @@ def assign_issue(issue_id_readable: str, login: str | None, email: str | None, u
                     issue_id_readable,
                     yt_user_id_resolved,
                     login)
+        _ensure_in_progress(issue_id, issue_id_readable)
         return True
 
     logger.debug('YouTrack customFields повернув помилку під час призначення')
@@ -157,3 +168,42 @@ def _build_assignee_value(yt_user_id: str, login: str | None, email: str | None)
     if email:
         value_payload['email'] = email
     return value_payload
+
+
+def _ensure_in_progress(issue_id: str, issue_id_readable: str) -> None:
+    """Встановлює статус задачі у значення «в роботі», якщо налаштовано."""
+    state_field_name: str | None = YOUTRACK_STATE_FIELD_NAME
+    desired_state: str | None = YOUTRACK_STATE_IN_PROGRESS
+    if not state_field_name or not desired_state:
+        logger.debug('Статус не налаштовано: field=%s desired=%s', state_field_name, desired_state)
+        return
+
+    fields_optional: CustomFieldMap | None = fetch_issue_custom_fields(issue_id, {state_field_name})
+    if not fields_optional:
+        logger.warning('Поле стану %s не знайдено у задачі %s', state_field_name, issue_id_readable)
+        return
+
+    field: CustomField | None = _pick_field(fields_optional, {state_field_name})
+    if field is None:
+        logger.warning('Поле стану %s відсутнє у задачі %s', state_field_name, issue_id_readable)
+        return
+
+    state_id: str | None = find_state_value_id(field, desired_state)
+    if state_id is None:
+        logger.warning('Значення стану %s не знайдено у задачі %s', desired_state, issue_id_readable)
+        return
+
+    payload: dict[str, object] = {'value': {'id': state_id}}
+    project_custom_obj: object | None = field.get('projectCustomField')
+    project_custom: Mapping[str, object] = (
+        project_custom_obj if isinstance(project_custom_obj, dict) else {}
+    )
+    field_id_obj: object | None = project_custom.get('id')
+    if not isinstance(field_id_obj, str):
+        logger.warning('ID поля стану відсутній у задачі %s', issue_id_readable)
+        return
+
+    if assign_custom_field(issue_id, field_id_obj, payload):
+        logger.info('Статус задачі %s оновлено на %s', issue_id_readable, desired_state)
+    else:
+        logger.warning('Не вдалося оновити статус задачі %s на %s', issue_id_readable, desired_state)

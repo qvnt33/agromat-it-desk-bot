@@ -1,0 +1,12 @@
+{
+  "name": "yt2tg-webhook",
+  "title": "YouTrack → Telegram Webhook",
+  "description": "Sends issue creation events from YouTrack to Telegram through a secure webhook.",
+  "version": "1.0.0",
+  "$schema": "https://json.schemastore.org/youtrack-app.json",
+  "vendor": {
+    "name": "admin",
+    "url": "https://github.com/"
+  },
+  "icon": "public/icon.svg"
+}

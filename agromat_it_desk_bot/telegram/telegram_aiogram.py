@@ -6,16 +6,28 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
-from .telegram_commands import (
-    handle_confirm_login_command,
-    handle_register_command,
-    send_help,
-)
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, InaccessibleMessage, Message, Update
 
 from agromat_it_desk_bot.config import BOT_TOKEN
+from agromat_it_desk_bot.telegram.middleware import AuthorizationMiddleware
+from agromat_it_desk_bot.telegram.telegram_commands import (
+    CALLBACK_CONFIRM_NO,
+    CALLBACK_CONFIRM_YES,
+    CALLBACK_RECONNECT_START,
+    CALLBACK_UNLINK_YES,
+    CALLBACK_UNLINK_NO,
+    handle_confirm_reconnect,
+    handle_connect_command,
+    handle_link_command,
+    handle_reconnect_shortcut,
+    handle_start_command,
+    handle_token_submission,
+    handle_unlink_command,
+    handle_unlink_decision,
+    send_help,
+)
 
 if TYPE_CHECKING:
     from agromat_it_desk_bot.callback_handlers import CallbackContext
@@ -23,6 +35,7 @@ if TYPE_CHECKING:
 logger: logging.Logger = logging.getLogger(__name__)
 
 _router: Router = Router()
+_router.message.middleware(AuthorizationMiddleware({'start', 'help', 'connect', 'link', 'unlink'}))
 _bot: Bot | None = None
 _dispatcher: Dispatcher | None = None
 
@@ -61,40 +74,142 @@ def _ensure_app() -> tuple[Dispatcher, Bot]:
     return _dispatcher, _bot
 
 
-async def _on_help(message: Message) -> None:
-    """Надсилає інструкцію при командах /start та /help."""
+async def _on_start(message: Message) -> None:
+    """Надсилає інструкцію для команди /start."""
     chat_id: int | None = message.chat.id if message.chat else None
     if chat_id is None:
-        logger.debug('Невідомий chat_id для повідомлення: %s', message.model_dump(mode='python'))
+        logger.debug('Невідомий chat_id для /start: %s', message.model_dump(mode='python'))
         return
-    logger.debug('Відправлення повідомлення /help: chat_id=%s', chat_id)
+    payload: dict[str, object] = message.model_dump(mode='python')
+    await asyncio.to_thread(handle_start_command, chat_id, payload)
+
+
+async def _on_help(message: Message) -> None:
+    """Пояснює процедуру привʼязки токена."""
+    chat_id: int | None = message.chat.id if message.chat else None
+    if chat_id is None:
+        logger.debug('Невідомий chat_id для /help: %s', message.model_dump(mode='python'))
+        return
     await asyncio.to_thread(send_help, chat_id)
 
 
-async def _on_register(message: Message) -> None:
-    """Обробляє команду /register через існуючу бізнес-логіку."""
+async def _on_connect(message: Message) -> None:
+    """Обробляє команду /connect."""
     chat_id: int | None = message.chat.id if message.chat else None
     text: str | None = message.text
     if chat_id is None or text is None:
-        logger.debug('Пропущено /register: chat_id=%s text=%s', chat_id, text)
+        logger.debug('Пропущено /connect: chat_id=%s text=%s', chat_id, text)
         return
-
-    payload: dict[str, object] = message.model_dump(mode='python')  # Серіалізоване повідомлення Telegram
-    logger.debug('Переадресація /register в командний модуль: chat_id=%s', chat_id)
-    await asyncio.to_thread(handle_register_command, chat_id, payload, text)
+    payload: dict[str, object] = message.model_dump(mode='python')
+    await asyncio.to_thread(handle_connect_command, chat_id, payload, text)
 
 
-async def _on_confirm_login(message: Message) -> None:
-    """Обробляє команду /confirm_login."""
+async def _on_link(message: Message) -> None:
+    """Обробляє команду /link."""
     chat_id: int | None = message.chat.id if message.chat else None
     text: str | None = message.text
     if chat_id is None or text is None:
-        logger.debug('Пропущено /confirm_login: chat_id=%s text=%s', chat_id, text)
+        logger.debug('Пропущено /link: chat_id=%s text=%s', chat_id, text)
+        return
+    payload: dict[str, object] = message.model_dump(mode='python')
+    await asyncio.to_thread(handle_link_command, chat_id, payload, text)
+
+
+async def _on_unlink(message: Message) -> None:
+    """Обробляє команду /unlink."""
+    chat_id: int | None = message.chat.id if message.chat else None
+    if chat_id is None:
+        logger.debug('Пропущено /unlink: chat_id=%s', chat_id)
+        return
+    payload: dict[str, object] = message.model_dump(mode='python')
+    await asyncio.to_thread(handle_unlink_command, chat_id, payload)
+
+
+async def _on_text(message: Message) -> None:
+    """Розглядає повідомлення як токен або надсилає підказку."""
+    chat_id: int | None = message.chat.id if message.chat else None
+    text: str | None = message.text
+    if chat_id is None or text is None:
+        logger.debug('Пропущено повідомлення без тексту: %s', message.model_dump(mode='python'))
         return
 
-    payload: dict[str, object] = message.model_dump(mode='python')  # Сирі дані повідомлення для бізнес-логіки
-    logger.debug('Переадресація /confirm_login в командний модуль: chat_id=%s', chat_id)
-    await asyncio.to_thread(handle_confirm_login_command, chat_id, payload, text)
+    payload: dict[str, object] = message.model_dump(mode='python')
+    await asyncio.to_thread(handle_token_submission, chat_id, payload, text)
+
+
+async def _on_reconnect_shortcut_callback(query: CallbackQuery) -> None:
+    """Обробляє кнопку швидкого переходу до оновлення токена."""
+    callback_message: Message | InaccessibleMessage | None = query.message
+    if not isinstance(callback_message, Message) or callback_message.chat is None:
+        logger.debug('Пропущено reconnect:start без повідомлення: %s', query.model_dump(mode='python'))
+        await query.answer()
+        return
+
+    chat_id: int = callback_message.chat.id
+    await query.answer()
+    await asyncio.to_thread(handle_reconnect_shortcut, chat_id)
+
+
+async def _process_confirm_callback(query: CallbackQuery, accept: bool) -> None:
+    """Обробляє підтвердження або скасування оновлення токена."""
+    callback_message: Message | InaccessibleMessage | None = query.message
+    tg_user_id: int | None = query.from_user.id if query.from_user else None
+    if tg_user_id is None or not isinstance(callback_message, Message) or callback_message.chat is None:
+        await query.answer('Невідомий користувач', show_alert=True)
+        return
+
+    chat_id: int = callback_message.chat.id
+    message_id: int | None = callback_message.message_id
+    if message_id is None:
+        await query.answer('Невідоме повідомлення', show_alert=True)
+        return
+
+    processed: bool = await asyncio.to_thread(handle_confirm_reconnect, chat_id, message_id, tg_user_id, accept)
+    if processed:
+        await query.answer()
+        return
+
+    await query.answer('Запит на оновлення не знайдено', show_alert=True)
+
+
+async def _on_confirm_yes(query: CallbackQuery) -> None:
+    """Підтверджує оновлення токена."""
+    await _process_confirm_callback(query, True)
+
+
+async def _on_confirm_no(query: CallbackQuery) -> None:
+    """Скасовує оновлення токена."""
+    await _process_confirm_callback(query, False)
+
+
+async def _on_unlink_yes(query: CallbackQuery) -> None:
+    """Підтверджує відʼєднання поточного акаунта."""
+    await _process_unlink_callback(query, True)
+
+
+async def _on_unlink_no(query: CallbackQuery) -> None:
+    """Скасовує відʼєднання."""
+    await _process_unlink_callback(query, False)
+
+
+async def _process_unlink_callback(query: CallbackQuery, accept: bool) -> None:
+    callback_message: Message | InaccessibleMessage | None = query.message
+    tg_user_id: int | None = query.from_user.id if query.from_user else None
+    if tg_user_id is None or not isinstance(callback_message, Message) or callback_message.chat is None:
+        await query.answer('Невідомий користувач', show_alert=True)
+        return
+
+    chat_id: int = callback_message.chat.id
+    message_id: int | None = callback_message.message_id
+    if message_id is None:
+        await query.answer('Невідоме повідомлення', show_alert=True)
+        return
+
+    processed: bool = await asyncio.to_thread(handle_unlink_decision, chat_id, message_id, tg_user_id, accept)
+    if processed:
+        await query.answer()
+    else:
+        await query.answer('Запит на відʼєднання не знайдено', show_alert=True)
 
 
 async def _on_accept_issue_callback(query: CallbackQuery) -> None:
@@ -136,32 +251,15 @@ async def _on_accept_issue_callback(query: CallbackQuery) -> None:
     await asyncio.to_thread(callback_handlers.handle_accept, issue_id, context)
 
 
-_router.message(CommandStart())(_on_help)
+_router.message(CommandStart())(_on_start)
 _router.message(Command(commands=['help']))(_on_help)
-_router.message(Command(commands=['register']))(_on_register)
-_router.message(Command(commands=['confirm_login']))(_on_confirm_login)
+_router.message(Command(commands=['connect']))(_on_connect)
+_router.message(Command(commands=['link']))(_on_link)
+_router.message(Command(commands=['unlink']))(_on_unlink)
+_router.callback_query(F.data == CALLBACK_RECONNECT_START)(_on_reconnect_shortcut_callback)
+_router.callback_query(F.data == CALLBACK_CONFIRM_YES)(_on_confirm_yes)
+_router.callback_query(F.data == CALLBACK_CONFIRM_NO)(_on_confirm_no)
+_router.callback_query(F.data == CALLBACK_UNLINK_YES)(_on_unlink_yes)
+_router.callback_query(F.data == CALLBACK_UNLINK_NO)(_on_unlink_no)
 _router.callback_query()(_on_accept_issue_callback)
-
-
-_KNOWN_SLASH_COMMANDS: set[str] = {'/start', '/help', '/register', '/confirm_login'}
-
-
-async def _on_unknown_message(message: Message) -> None:
-    """Надсилає довідку, якщо отримано текст без відомої команди."""
-    chat_id: int | None = message.chat.id if message.chat else None
-    text: str | None = message.text
-    if chat_id is None or text is None:
-        logger.debug('Пропущено повідомлення без тексту або chat_id: %s', message.model_dump(mode='python'))
-        return
-
-    command_token: str = text.split(maxsplit=1)[0]
-    normalized_command: str = command_token.split('@', 1)[0].lower()
-    if normalized_command in _KNOWN_SLASH_COMMANDS:
-        logger.debug('Повідомлення з відомою командою, обробка пропущена: %s', normalized_command)
-        return
-
-    logger.debug('Отримано невідому команду: chat_id=%s текст=%s', chat_id, text)
-    await asyncio.to_thread(send_help, chat_id)
-
-
-_router.message(F.text)(_on_unknown_message)
+_router.message(F.text)(_on_text)

@@ -6,278 +6,390 @@ import logging
 from collections.abc import Mapping
 from typing import NamedTuple
 
-from agromat_it_desk_bot.config import YT_BASE_URL, YT_TOKEN
-from agromat_it_desk_bot.messages import Msg, render
+from agromat_it_desk_bot.auth import (
+    RegistrationError,
+    RegistrationOutcome,
+    deactivate_user,
+    get_authorized_yt_user,
+    is_authorized,
+    register_user,
+)
+from agromat_it_desk_bot.config import PROJECT_KEY
+from agromat_it_desk_bot.messages import Msg, get_template, render
 from agromat_it_desk_bot.telegram.telegram_service import call_api
-from agromat_it_desk_bot.utils import is_login_taken, resolve_from_map, upsert_user_map_entry
-from agromat_it_desk_bot.youtrack.youtrack_service import lookup_user_by_login
 
 logger: logging.Logger = logging.getLogger(__name__)
 
-
-class PendingLoginChange(NamedTuple):
-    """Описує запис для відкладеного оновлення логіна."""
-
-    requested_login: str
-    resolved_login: str
-    email: str | None
-    yt_user_id: str
+_MARKDOWN_ESCAPES: str = r"\\_`*[]()~>#+=|{}!"
 
 
-# Поточні незавершені зміни логіна за Telegram ID
-pending_login_updates: dict[int, PendingLoginChange] = {}
+def _escape_markdown(text: str) -> str:
+    """Екранує спеціальні символи Markdown в рядку."""
+    escaped: list[str] = []
+    for char in text:
+        if char in _MARKDOWN_ESCAPES:
+            escaped.append(f'\\{char}')
+        else:
+            escaped.append(char)
+    return ''.join(escaped)
+
+TOKEN_GUIDE_URL: str = 'https://www.jetbrains.com/help/youtrack/server/Manage-Permanent-Token.html'
+CALLBACK_RECONNECT_START: str = 'reconnect:start'
+CALLBACK_CONFIRM_YES: str = 'confirm_reconnect_yes'
+CALLBACK_CONFIRM_NO: str = 'confirm_reconnect_no'
+CALLBACK_UNLINK_YES: str = 'unlink:yes'
+CALLBACK_UNLINK_NO: str = 'unlink:no'
+
+
+class PendingTokenUpdate(NamedTuple):
+    """Зберігає дані про запит на оновлення токена."""
+
+    chat_id: int
+    token: str
+
+
+pending_token_updates: dict[int, PendingTokenUpdate] = {}
 
 __all__ = [
-    'PendingLoginChange',
-    'pending_login_updates',
+    'PendingTokenUpdate',
+    'pending_token_updates',
+    'CALLBACK_RECONNECT_START',
+    'CALLBACK_CONFIRM_YES',
+    'CALLBACK_CONFIRM_NO',
+    'CALLBACK_UNLINK_YES',
+    'CALLBACK_UNLINK_NO',
+    'handle_start_command',
+    'handle_connect_command',
+    'handle_link_command',
+    'handle_reconnect_shortcut',
+    'handle_unlink_decision',
+    'handle_confirm_reconnect',
     'handle_register_command',
     'handle_confirm_login_command',
+    'handle_unlink_command',
+    'handle_token_submission',
+    'notify_authorization_required',
     'send_help',
-    'call_api',
 ]
 
 
-def handle_register_command(chat_id: int, message: Mapping[str, object], text: str) -> None:
-    """Обробляє команду ``/register`` та зберігає дані користувача."""
-    logger.debug('Отримано /register: chat_id=%s text=%s', chat_id, text)
-    # Слова з повідомлення користувача
-    parts: list[str] = text.split()
-    if len(parts) < 2:
-        _send_template(chat_id, Msg.ERR_REGISTER_FORMAT)
-        return
+def handle_start_command(chat_id: int, message: Mapping[str, object]) -> None:
+    """
+    Визначає статус користувача та надсилає інструкцію підключення.
 
-    _, *args = parts
-    # Потенційний логін з команди
-    login_candidate: str | None = args[0] if args else None
-    if not login_candidate:
-        _send_template(chat_id, Msg.ERR_REGISTER_FORMAT)
-        return
-
-    # Очищений логін для реєстрації
-    login: str = login_candidate.strip()
-    if not login:
-        _send_template(chat_id, Msg.ERR_REGISTER_FORMAT)
-        return
-
-    from_obj: object | None = message.get('from') or message.get('from_user')
-    from_mapping: Mapping[str, object] | None = from_obj if isinstance(from_obj, dict) else None
-    # Беруть ідентифікатор користувача з метаданих повідомлення
-    tg_user_obj: object | None = from_mapping.get('id') if from_mapping else None
-    tg_user_id: int | None = tg_user_obj if isinstance(tg_user_obj, int) else None
+    :param chat_id: Ідентифікатор чату Telegram.
+    :param message: Повідомлення Telegram у вигляді словника.
+    """
+    tg_user_id = _extract_user_id(message)
     if tg_user_id is None:
-        logger.warning('Не вдалося визначити відправника для команди /register: %s', message)
-        _send_template(chat_id, Msg.ERR_TG_ID_UNAVAILABLE)
+        _reply(chat_id, render(Msg.ERR_TG_ID_UNAVAILABLE))
         return
 
-    current_login, _, _ = resolve_from_map(tg_user_id)
-    if current_login and current_login.lower() == login.lower():
-        pending_login_updates.pop(tg_user_id, None)
-        _send_template(chat_id, Msg.REGISTER_ALREADY, login=current_login, suggested=current_login)
-        return
-
-    details: PendingLoginChange | None = _resolve_login_details(chat_id, login)
-    if details is None:
-        # Очищають буфер, якщо дані не отримано
-        pending_login_updates.pop(tg_user_id, None)
-        logger.debug('Не вдалося отримати дані YouTrack: tg_user_id=%s login=%s', tg_user_id, login)
-        return
-
-    # Ідентифікатор для виключення з пошуку дублікатів
-    exclude_key: int | None = tg_user_id if current_login is not None else None
-    if is_login_taken(details.resolved_login, exclude_tg_user_id=exclude_key):
-        pending_login_updates.pop(tg_user_id, None)
-        _send_template(chat_id, Msg.ERR_LOGIN_TAKEN)
-        logger.debug('Логін зайнятий під час /register: login=%s', details.resolved_login)
-        return
-
-    if current_login and current_login.lower() != details.resolved_login.lower():
-        # Зберігають зміну для підтвердження користувачем
-        pending_login_updates[tg_user_id] = details
-        logger.debug('Очікування підтвердження логіна: tg_user_id=%s requested=%s resolved=%s',
-                     tg_user_id,
-                     details.requested_login,
-                     details.resolved_login)
-        _send_template(chat_id, Msg.REGISTER_PROMPT_CONFIRM, login=details.requested_login)
-        return
-
-    pending_login_updates.pop(tg_user_id, None)
-    logger.debug('Негайна реєстрація без підтвердження: tg_user_id=%s resolved_login=%s',
-                 tg_user_id,
-                 details.resolved_login)
-    _complete_registration(chat_id, tg_user_id, details)
-
-
-def handle_confirm_login_command(chat_id: int, message: Mapping[str, object], text: str) -> None:
-    """Підтверджує зміну логіна на новий."""
-    logger.debug('Отримано /confirm_login: chat_id=%s text=%s', chat_id, text)
-    # Аргументи команди /confirm_login
-    parts: list[str] = text.split()
-    if len(parts) < 2:
-        _send_template(chat_id, Msg.ERR_CONFIRM_FORMAT)
-        return
-
-    _, *args = parts
-    # Логін, який підтверджують
-    login_candidate: str | None = args[0] if args else None
-    if not login_candidate:
-        _send_template(chat_id, Msg.ERR_CONFIRM_FORMAT)
-        return
-
-    login: str = login_candidate.strip()
+    login, email, _ = get_authorized_yt_user(tg_user_id)
     if not login:
-        _send_template(chat_id, Msg.ERR_CONFIRM_FORMAT)
+        keyboard: dict[str, object] = {
+            'inline_keyboard': [
+                [{'text': render(Msg.CONNECT_GUIDE_BUTTON), 'url': TOKEN_GUIDE_URL}],
+            ],
+        }
+        _reply(chat_id, render(Msg.CONNECT_START_NEW), reply_markup=keyboard)
         return
 
-    from_obj: object | None = message.get('from') or message.get('from_user')
-    from_mapping: Mapping[str, object] | None = from_obj if isinstance(from_obj, dict) else None
-    # Захищаються від підміни чату під час підтвердження
-    tg_user_obj: object | None = from_mapping.get('id') if from_mapping else None
-    tg_user_id: int | None = tg_user_obj if isinstance(tg_user_obj, int) else None
-    if tg_user_id is None:
-        logger.warning('Не вдалося визначити відправника для команди /confirm_login: %s', message)
-        _send_template(chat_id, Msg.ERR_TG_ID_UNAVAILABLE)
-        return
-
-    pending_details: PendingLoginChange | None = pending_login_updates.get(tg_user_id)
-    if pending_details is None:
-        _send_template(chat_id, Msg.ERR_NO_PENDING)
-        logger.debug('Відсутній запит на підтвердження: tg_user_id=%s', tg_user_id)
-        return
-
-    if pending_details.requested_login.lower() != login.lower():
-        # Повідомляють про спробу підтвердити інший логін
-        _send_template(chat_id, Msg.ERR_CONFIRM_MISMATCH, expected=pending_details.requested_login, actual=login)
-        logger.debug('Невідповідність логіна при підтвердженні: tg_user_id=%s expected=%s actual=%s',
-                     tg_user_id,
-                     pending_details.requested_login,
-                     login)
-        return
-
-    current_login, _, _ = resolve_from_map(tg_user_id)
-    if current_login and current_login.lower() == pending_details.resolved_login.lower():
-        pending_login_updates.pop(tg_user_id, None)
-        _send_template(chat_id, Msg.REGISTER_ALREADY, login=current_login, suggested=current_login)
-        return
-
-    if is_login_taken(pending_details.resolved_login, exclude_tg_user_id=tg_user_id):
-        pending_login_updates.pop(tg_user_id, None)
-        _send_template(chat_id, Msg.ERR_LOGIN_TAKEN)
-        logger.debug('Логін зайнятий під час підтвердження: login=%s', pending_details.resolved_login)
-        return
-
-    _complete_registration(chat_id, tg_user_id, pending_details, previous_login=current_login)
-    logger.debug('Підтверджено зміну логіна: tg_user_id=%s new_login=%s',
-                 tg_user_id,
-                 pending_details.resolved_login)
+    project_key: str = PROJECT_KEY or '-'
+    text: str = render(
+        Msg.CONNECT_START_REGISTERED,
+        login=_escape_markdown(login or '-'),
+        email=_escape_markdown(email or '-'),
+        project_key=_escape_markdown(project_key),
+    )
+    _reply(chat_id, text)
 
 
 def send_help(chat_id: int) -> None:
-    """Надсилає інформаційне повідомлення з інструкцією /register."""
-    _send_template(chat_id, Msg.HELP_REGISTER)
+    """
+    Нагадує, як надіслати токен для підключення.
+
+    :param chat_id: Ідентифікатор чату Telegram.
+    """
+    _reply(chat_id, render(Msg.CONNECT_HELP))
 
 
-def _complete_registration(
-    chat_id: int,
-    tg_user_id: int,
-    details: PendingLoginChange,
-    *,
-    previous_login: str | None = None,
-) -> bool:
-    """Завершує реєстрацію користувача з підготовленими даними."""
-    try:
-        upsert_user_map_entry(
-            tg_user_id,
-            login=details.resolved_login,
-            email=details.email,
-            yt_user_id=details.yt_user_id,
-        )
-        logger.debug('Оновлення user_map успішне: tg_user_id=%s login=%s', tg_user_id, details.resolved_login)
-    except ValueError as err:
-        friendly_error: str = str(err) or render(Msg.ERR_STORAGE_GENERIC)
-        _reply_text(chat_id, friendly_error)
-        logger.error('Помилка валідації user_map: tg_user_id=%s err=%s', tg_user_id, err)
+def handle_connect_command(chat_id: int, message: Mapping[str, object], text: str) -> None:
+    """
+    Приймає токен з команди ``/connect`` та виконує підключення чи оновлення.
+
+    :param chat_id: Ідентифікатор чату Telegram.
+    :param message: Повідомлення Telegram у вигляді словника.
+    :param text: Повний текст команди.
+    """
+    tg_user_id = _extract_user_id(message)
+    if tg_user_id is None:
+        _reply(chat_id, render(Msg.ERR_TG_ID_UNAVAILABLE))
+        return
+
+    token = _extract_token_argument(text)
+    if token is None:
+        _reply(chat_id, render(Msg.CONNECT_EXPECTS_TOKEN))
+        return
+
+    if not is_authorized(tg_user_id):
+        _complete_registration(chat_id, tg_user_id, token, Msg.CONNECT_SUCCESS_NEW)
+        return
+
+    _prepare_token_update(chat_id, tg_user_id, token)
+
+def handle_link_command(chat_id: int, message: Mapping[str, object], text: str) -> None:
+    """
+    Обробляє застарілу команду ``/link``, перенаправляючи на ``/connect``.
+
+    :param chat_id: Ідентифікатор чату Telegram.
+    :param message: Повідомлення Telegram у вигляді словника.
+    :param text: Повний текст команди.
+    """
+    logger.debug('Перенаправлено /link на /connect: chat_id=%s', chat_id)
+    adapted_text: str = text.replace('/link', '/connect', 1) if text.startswith('/link') else text
+    handle_connect_command(chat_id, message, adapted_text)
+
+
+def handle_reconnect_shortcut(chat_id: int) -> None:
+    """
+    Пояснює, як оновити токен після натискання кнопки у ``/start``.
+
+    :param chat_id: Ідентифікатор чату Telegram.
+    """
+    _reply(chat_id, render(Msg.CONNECT_SHORTCUT_PROMPT))
+
+
+def handle_unlink_decision(chat_id: int, message_id: int, tg_user_id: int, accept: bool) -> bool:
+    """Опрацьовує підтвердження або скасування відʼєднання."""
+    _delete_message(chat_id, message_id)
+
+    if not is_authorized(tg_user_id):
         return False
-    except FileNotFoundError as err:
-        # Сховище користувачів недоступне, фіксують помилку для DevOps
-        logger.exception('Не вдалося створити user_map.json: %s', err)
-        _send_template(chat_id, Msg.ERR_STORAGE)
-        return False
-    except Exception as err:  # noqa: BLE001
-        # Логують причину, щоб не втратити інформацію про часткову невдачу
-        logger.exception('Помилка при оновленні user_map для %s: %s', tg_user_id, err)
-        _send_template(chat_id, Msg.ERR_UNKNOWN)
-        return False
 
-    pending_login_updates.pop(tg_user_id, None)
-    logger.info(
-        'Користувач %s зареєструвався: login=%s email=%s yt_id=%s',
-        tg_user_id,
-        details.resolved_login,
-        details.email,
-        details.yt_user_id,
-    )
+    if not accept:
+        _reply(chat_id, render(Msg.UNLINK_CANCELLED))
+        return True
 
-    base_text: str = render(
-        Msg.REGISTER_SAVED,
-        login=details.resolved_login,
-        email=details.email or '-',
-        yt_id=details.yt_user_id,
-    )
-    extra_line: str = ''
-    if previous_login and previous_login.lower() != details.resolved_login.lower():
-        extra_line = '\n' + render(Msg.REGISTER_UPDATED_NOTE, previous=previous_login, current=details.resolved_login)
-        logger.debug('Повідомлення про зміну логіна: tg_user_id=%s previous=%s new=%s',
-                     tg_user_id,
-                     previous_login,
-                     details.resolved_login)
-
-    _reply_text(chat_id, base_text + extra_line)
-    logger.info('Завершено реєстрацію користувача: tg_user_id=%s login=%s', tg_user_id, details.resolved_login)
+    deactivate_user(tg_user_id)
+    _reply(chat_id, render(Msg.AUTH_UNLINK_DONE))
     return True
 
 
-def _resolve_login_details(chat_id: int, login: str) -> PendingLoginChange | None:
-    """Отримує деталі облікового запису YouTrack для заданого логіна."""
-    if not (YT_BASE_URL and YT_TOKEN):
-        # Неможливо звернутися до YouTrack без базових параметрів
-        logger.error('Команда /register недоступна: не налаштовано YT_BASE_URL або YT_TOKEN')
-        _send_template(chat_id, Msg.ERR_YT_NOT_CONFIGURED)
-        return None
+def handle_confirm_reconnect(chat_id: int, message_id: int, tg_user_id: int, accept: bool) -> bool:
+    """
+    Обробляє вибір з inline-кнопок підтвердження оновлення токена.
 
+    :param tg_user_id: Ідентифікатор користувача Telegram.
+    :param accept: ``True`` якщо користувач підтвердив оновлення.
+    :returns: ``True``, якщо callback розпізнано.
+    """
+    _delete_message(chat_id, message_id)
+
+    pending = pending_token_updates.pop(tg_user_id, None)
+    if pending is None:
+        logger.debug('Відсутній запит на оновлення токена: tg_user_id=%s', tg_user_id)
+        return False
+
+    if not accept:
+        _reply(chat_id, render(Msg.CONNECT_CANCELLED))
+        return True
+
+    _complete_registration(chat_id, tg_user_id, pending.token, Msg.CONNECT_SUCCESS_UPDATED)
+    return True
+
+
+def handle_register_command(chat_id: int, message: Mapping[str, object], text: str) -> None:  # noqa: ARG001
+    """
+    Залишено для сумісності зі старими викликами ``/register``.
+
+    :param chat_id: Ідентифікатор чату Telegram.
+    :param message: Повідомлення Telegram.
+    :param text: Вміст команди (не використовується).
+    """
+    handle_start_command(chat_id, message)
+
+
+def handle_confirm_login_command(chat_id: int, message: Mapping[str, object], text: str) -> None:  # noqa: ARG001
+    """
+    Залишено для сумісності зі старими викликами ``/confirm_login``.
+
+    :param chat_id: Ідентифікатор чату Telegram.
+    :param message: Повідомлення Telegram.
+    :param text: Вміст команди (не використовується).
+    """
+    handle_start_command(chat_id, message)
+
+
+def handle_unlink_command(chat_id: int, message: Mapping[str, object]) -> None:
+    """
+    Запитує підтвердження на відʼєднання користувача.
+
+    :param chat_id: Ідентифікатор чату.
+    :param message: Повідомлення Telegram.
+    """
+    tg_user_id = _extract_user_id(message)
+    if tg_user_id is None:
+        _reply(chat_id, render(Msg.ERR_TG_ID_UNAVAILABLE))
+        return
+
+    if not is_authorized(tg_user_id):
+        _reply(chat_id, render(Msg.AUTH_NOTHING_TO_UNLINK))
+        return
+
+    keyboard: dict[str, object] = {
+        'inline_keyboard': [
+            [
+                {'text': render(Msg.UNLINK_CONFIRM_YES_BUTTON), 'callback_data': CALLBACK_UNLINK_YES},
+                {'text': render(Msg.UNLINK_CONFIRM_NO_BUTTON), 'callback_data': CALLBACK_UNLINK_NO},
+            ],
+        ],
+    }
+    _reply(chat_id, render(Msg.UNLINK_CONFIRM_PROMPT), reply_markup=keyboard)
+
+
+def handle_token_submission(chat_id: int, message: Mapping[str, object], text: str) -> bool:
+    """
+    Реагує на приватне повідомлення, підказуючи формат команди.
+
+    :param chat_id: Ідентифікатор чату.
+    :param message: Повідомлення Telegram.
+    :param text: Текст повідомлення без команд.
+    :returns: ``True`` якщо повідомлення оброблено.
+    """
+    candidate: str = text.strip()
+    if not candidate or candidate.startswith('/'):
+        _reply(chat_id, render(Msg.CONNECT_NEEDS_START))
+        return True
+
+    tg_user_id = _extract_user_id(message)
+    if tg_user_id is None:
+        _reply(chat_id, render(Msg.ERR_TG_ID_UNAVAILABLE))
+        return True
+
+    if not is_authorized(tg_user_id):
+        _reply(chat_id, render(Msg.CONNECT_NEEDS_START))
+        return True
+
+    _reply(chat_id, render(Msg.CONNECT_NEEDS_START))
+    return True
+
+
+def notify_authorization_required(chat_id: int) -> None:
+    """
+    Повідомляє про потребу підключити бота перед використанням команди.
+
+    :param chat_id: Ідентифікатор чату.
+    """
+    _reply(chat_id, render(Msg.AUTH_REQUIRED))
+
+
+def _prepare_token_update(chat_id: int, tg_user_id: int, token: str) -> None:
+    """Готує підтвердження оновлення токена."""
+    login, email, _ = get_authorized_yt_user(tg_user_id)
+    pending_token_updates[tg_user_id] = PendingTokenUpdate(chat_id=chat_id, token=token)
+    _reply(
+        chat_id,
+        render(
+            Msg.CONNECT_CONFIRM_PROMPT,
+            login=_escape_markdown(login or '-'),
+            email=_escape_markdown(email or '-'),
+        ),
+        reply_markup=_confirm_keyboard(),
+    )
+
+
+def _complete_registration(chat_id: int, tg_user_id: int, token: str, success_msg: Msg) -> None:
+    """Виконує реєстрацію токена та надсилає результат користувачу."""
     try:
-        resolved_login, email, yt_user_id = lookup_user_by_login(login)
-        logger.debug('Запит YouTrack користувача: login=%s', login)
-    except AssertionError:
-        # Бібліотека YouTrack сигналізує про відсутність токена
-        logger.exception('Не налаштовано токен YouTrack для пошуку користувача')
-        _send_template(chat_id, Msg.ERR_YT_TOKEN_MISSING)
+        outcome: RegistrationOutcome = register_user(tg_user_id, token)
+    except RegistrationError as err:
+        logger.info('Не вдалося зберегти токен користувача %s: %s', tg_user_id, err)
+        _reply(chat_id, _map_registration_error(err))
+        return
+    if outcome is RegistrationOutcome.FOREIGN_OWNER:
+        _reply(chat_id, render(Msg.CONNECT_ALREADY_LINKED))
+        return
+    if outcome is RegistrationOutcome.ALREADY_CONNECTED:
+        _reply(chat_id, render(Msg.CONNECT_ALREADY_CONNECTED))
+        return
+
+    login, email, yt_user_id = get_authorized_yt_user(tg_user_id)
+    logger.info('Токен збережено: tg_user_id=%s yt_user_id=%s', tg_user_id, yt_user_id)
+    template: str = get_template(success_msg)
+    placeholders: dict[str, str] = {}
+    if '{login' in template:
+        placeholders['login'] = _escape_markdown(login or '-')
+    if '{email' in template:
+        placeholders['email'] = _escape_markdown(email or '-')
+    if '{yt_id' in template:
+        placeholders['yt_id'] = _escape_markdown(yt_user_id or '-')
+    _reply(chat_id, render(success_msg, **placeholders))
+
+
+def _delete_message(chat_id: int, message_id: int) -> None:
+    """Видаляє повідомлення з підтвердженням, ігноруючи помилки."""
+    call_api('deleteMessage', {'chat_id': chat_id, 'message_id': message_id})
+
+
+def _confirm_keyboard() -> dict[str, object]:
+    """Створює inline-клавіатуру для підтвердження оновлення токена."""
+    return {
+        'inline_keyboard': [
+            [
+                {'text': render(Msg.CONNECT_CONFIRM_YES_BUTTON), 'callback_data': CALLBACK_CONFIRM_YES},
+                {'text': render(Msg.CONNECT_CONFIRM_NO_BUTTON), 'callback_data': CALLBACK_CONFIRM_NO},
+            ],
+        ],
+    }
+
+
+def _extract_token_argument(text: str | None) -> str | None:
+    """Повертає токен з тексту команди або ``None``."""
+    if not text:
         return None
-    except Exception as err:  # noqa: BLE001
-        # Обробляють несподівані помилки мережі або API
-        logger.exception('Помилка пошуку користувача YouTrack за логіном %s: %s', login, err)
-        _send_template(chat_id, Msg.ERR_YT_FETCH)
+    parts: list[str] = text.split(maxsplit=1)
+    if len(parts) != 2:
         return None
-
-    if yt_user_id is None:
-        # Повідомляють, що користувача з таким логіном не існує
-        _send_template(chat_id, Msg.ERR_YT_USER_NOT_FOUND)
-        logger.debug('YouTrack не знайшов користувача: login=%s', login)
-        return None
-
-    resolved: str = resolved_login or login
-    logger.debug('YouTrack користувач знайдений: login=%s resolved=%s', login, resolved)
-    return PendingLoginChange(login, resolved, email, yt_user_id)
+    token: str = parts[1].strip()
+    return token or None
 
 
-def _reply_text(chat_id: int, text: str) -> None:
-    """Надсилає просте текстове повідомлення у чат."""
-    # Параметри звичайного повідомлення без форматування
-    payload: dict[str, object] = {'chat_id': chat_id, 'text': text, 'disable_web_page_preview': True}
+def _reply(
+    chat_id: int,
+    text: str,
+    *,
+    reply_markup: dict[str, object] | None = None,
+    parse_mode: str | None = 'MarkdownV2',
+) -> None:
+    """Надсилає повідомлення користувачу."""
+    payload: dict[str, object] = {
+        'chat_id': chat_id,
+        'text': text,
+        'disable_web_page_preview': True,
+    }
+    if parse_mode is not None:
+        payload['parse_mode'] = parse_mode
+    if reply_markup is not None:
+        payload['reply_markup'] = reply_markup
     call_api('sendMessage', payload)
 
 
-def _send_template(chat_id: int, msg: Msg, **params: object) -> None:
-    """Надсилає повідомлення за ключем локалізованого шаблону."""
-    # Рендерять шаблон локалізації та використовують загальну утиліту відправлення
-    text: str = render(msg, locale='uk', **params)
-    _reply_text(chat_id, text)
+def _extract_user_id(message: Mapping[str, object]) -> int | None:
+    """Повертає ідентифікатор користувача з обʼєкта повідомлення."""
+    from_candidate: object | None = message.get('from') or message.get('from_user')
+    if isinstance(from_candidate, Mapping):
+        user_id_obj: object | None = from_candidate.get('id')
+        if isinstance(user_id_obj, int):
+            return user_id_obj
+    return None
+
+
+def _map_registration_error(error: RegistrationError) -> str:
+    """Повертає локалізований текст для помилки реєстрації."""
+    message: str = str(error)
+    if message == 'YouTrack тимчасово недоступний':
+        return render(Msg.AUTH_LINK_TEMPORARY)
+    if message == 'Помилка конфігурації сервера':
+        return render(Msg.AUTH_LINK_CONFIG)
+    return render(Msg.CONNECT_FAILURE_INVALID)

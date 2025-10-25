@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import requests
+import requests  # type: ignore[import-untyped]
 from fastapi import HTTPException
 
 from agromat_it_desk_bot.config import BOT_TOKEN, TELEGRAM_CHAT_ID
@@ -29,7 +29,7 @@ def send_message(text: str, reply_markup: dict[str, Any] | None = None) -> None:
         'chat_id': TELEGRAM_CHAT_ID,
         'text': text,
         'disable_web_page_preview': True,
-        'parse_mode': 'HTML',
+        'parse_mode': 'Markdown',
     }
     logger.debug('Відправлення повідомлення: chat_id=%s length=%s', TELEGRAM_CHAT_ID, len(text))
     if reply_markup is not None:
@@ -39,7 +39,7 @@ def send_message(text: str, reply_markup: dict[str, Any] | None = None) -> None:
     endpoint: str = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'  # Формують URL виклику Telegram Bot API
 
     # Відправляють запит до Telegram Bot API з JSON-повідомленням
-    response: requests.Response = requests.post(endpoint, json=payload, timeout=10)
+    response: requests.Response = requests.post(endpoint, json=payload, headers=_json_headers(), timeout=10)
     if not response.ok:
         # Обробляють помилку відповіді Telegram
         logger.error('Telegram повернув помилку під час надсилання повідомлення: %s', response.text)
@@ -63,9 +63,18 @@ def call_api(method: str, payload: dict[str, Any]) -> requests.Response:
     # Викликають API Telegram з довільним методом
     endpoint: str = f'https://api.telegram.org/bot{BOT_TOKEN}/{method}'
     logger.debug('Виклик Telegram API: method=%s', method)
-    response: requests.Response = requests.post(endpoint, json=payload, timeout=10)
+    response: requests.Response = requests.post(endpoint, json=payload, headers=_json_headers(), timeout=10)
 
     if not response.ok:
         # Журналюють помилку Telegram
         logger.error('Помилка Telegram API (%s): %s', method, response.text)
     return response
+
+
+def _json_headers() -> dict[str, str]:
+    """Повертає заголовки для JSON-запитів Telegram API."""
+    return {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': 'agromat-it-desk-bot/1.0',
+    }

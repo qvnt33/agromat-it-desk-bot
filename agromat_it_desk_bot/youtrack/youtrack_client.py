@@ -6,7 +6,7 @@ import logging
 from collections.abc import Iterable, Mapping
 from typing import TypedDict, cast
 
-import requests
+import requests  # type: ignore[import-untyped]
 
 from agromat_it_desk_bot.config import YT_BASE_URL, YT_TOKEN
 

@@ -7,10 +7,11 @@ from typing import Any, NamedTuple
 
 from fastapi import HTTPException, Request
 
+from agromat_it_desk_bot.auth import get_authorized_yt_user, is_authorized
 from agromat_it_desk_bot.config import ALLOWED_TG_USER_IDS, TELEGRAM_WEBHOOK_SECRET
 from agromat_it_desk_bot.messages import Msg, render
 from agromat_it_desk_bot.telegram.telegram_service import call_api
-from agromat_it_desk_bot.youtrack.youtrack_service import assign_issue, resolve_account
+from agromat_it_desk_bot.youtrack.youtrack_service import assign_issue
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -99,20 +100,19 @@ def is_user_allowed(tg_user_id: int | None) -> bool:
     if tg_user_id is None:
         return False
 
-    if not ALLOWED_TG_USER_IDS:
-        login, email, yt_user_id = resolve_account(tg_user_id)
-        allowed: bool = any((login, email, yt_user_id))
-        logger.debug('Перевірка доступу без whitelist: tg_user_id=%s allowed=%s', tg_user_id, allowed)
-        return allowed
+    if not is_authorized(tg_user_id):
+        logger.debug('Користувача не авторизовано: tg_user_id=%s', tg_user_id)
+        return False
 
     if tg_user_id in ALLOWED_TG_USER_IDS:
         logger.debug('Користувач у whitelist: tg_user_id=%s', tg_user_id)
         return True
 
-    login, email, yt_user_id = resolve_account(tg_user_id)
-    allowed = any((login, email, yt_user_id))
-    logger.debug('Перевірка доступу через map: tg_user_id=%s allowed=%s', tg_user_id, allowed)
-    return allowed
+    if not ALLOWED_TG_USER_IDS:
+        return True
+
+    logger.debug('Користувач поза whitelist: tg_user_id=%s', tg_user_id)
+    return False
 
 
 def parse_action(payload: str) -> tuple[str, str | None]:
@@ -132,11 +132,16 @@ def handle_accept(issue_id: str, context: CallbackContext) -> None:
     :param issue_id: Читабельний ID задачі.
     :param context: Контекст callback-запиту.
     """
+    if context.tg_user_id is None:
+        logger.warning('Callback без ідентифікатора користувача: issue_id=%s', issue_id)
+        reply_assign_error(context.callback_id)
+        return
+
     login: str | None
     email: str | None
     yt_user_id: str | None
     try:
-        login, email, yt_user_id = resolve_account(context.tg_user_id)
+        login, email, yt_user_id = get_authorized_yt_user(context.tg_user_id)
         if not any((login, email, yt_user_id)):
             raise RuntimeError('Не знайдено мапінг користувача')
     except Exception as exc:  # noqa: BLE001

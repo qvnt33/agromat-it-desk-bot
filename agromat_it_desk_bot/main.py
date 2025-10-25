@@ -44,11 +44,21 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(lifespan=_lifespan)
 
 # Перехідні псевдоніми для збереження сумісності тестів/імпортів
-PendingLoginChange = telegram_commands.PendingLoginChange
-pending_login_updates = telegram_commands.pending_login_updates
+PendingTokenUpdate = telegram_commands.PendingTokenUpdate
+pending_token_updates = telegram_commands.pending_token_updates
+# Сумісність зі старим API
+PendingLoginChange = PendingTokenUpdate
+pending_login_updates = pending_token_updates
 handle_register_command = telegram_commands.handle_register_command
 handle_confirm_login_command = telegram_commands.handle_confirm_login_command
 send_help = telegram_commands.send_help
+handle_start_command = telegram_commands.handle_start_command
+handle_link_command = telegram_commands.handle_link_command
+handle_unlink_command = telegram_commands.handle_unlink_command
+handle_connect_command = telegram_commands.handle_connect_command
+handle_reconnect_command = telegram_commands.handle_connect_command  # зворотна сумісність
+handle_confirm_reconnect = telegram_commands.handle_confirm_reconnect
+handle_reconnect_shortcut = telegram_commands.handle_reconnect_shortcut
 
 
 @app.post('/youtrack')

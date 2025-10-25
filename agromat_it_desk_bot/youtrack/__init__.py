@@ -13,7 +13,6 @@ from .youtrack_client import (
     find_user_id,
     get_issue_internal_id,
 )
-from .youtrack_service import assign_issue, resolve_account
 
 __all__ = [
     'CustomField',
@@ -25,6 +24,4 @@ __all__ = [
     'find_user',
     'find_user_id',
     'get_issue_internal_id',
-    'assign_issue',
-    'resolve_account',
 ]

@@ -35,8 +35,22 @@ YT_TOKEN: str | None = os.getenv('YT_TOKEN')
 USER_MAP_PATH: str = os.getenv('USER_MAP_PATH', './user_map.json')
 USER_MAP_FILE: Path = Path(USER_MAP_PATH)
 
+PROJECT_KEY: str | None = os.getenv('YT_PROJECT_KEY')
+PROJECT_ID: str | None = os.getenv('YT_PROJECT_ID')
+
+# Шлях до локальної БД користувачів
+DATABASE_PATH: Path = Path(os.getenv('DATABASE_PATH', './data/bot.sqlite3'))
+
+# Таймаути та кількість спроб перевірки токенів YouTrack
+YT_VALIDATE_TIMEOUT: float = float(os.getenv('YT_VALIDATE_TIMEOUT', '5.0'))
+YT_VALIDATE_RETRIES: int = int(os.getenv('YT_VALIDATE_RETRIES', '3'))
+
 # Визначають назву кастом-філда для виконавця в YouTrack (за замовчуванням Assignee)
 YOUTRACK_ASSIGNEE_FIELD_NAME: str = os.getenv('YOUTRACK_ASSIGNEE_FIELD_NAME', 'Assignee')
+
+# Поле статусу та значення для режиму «В роботі»
+YOUTRACK_STATE_FIELD_NAME: str | None = os.getenv('YOUTRACK_STATE_FIELD_NAME')
+YOUTRACK_STATE_IN_PROGRESS: str | None = os.getenv('YOUTRACK_STATE_IN_PROGRESS')
 
 # Шаблони текстів
 TELEGRAM_MAIN_MESSAGE_TEMPLATE = '<b>{issue_id}</b> — {summary}\n\
