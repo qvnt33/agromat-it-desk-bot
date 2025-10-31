@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import logging.config
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from html import escape
 from pathlib import Path
 from typing import Any, TypedDict
@@ -14,6 +14,85 @@ from agromat_it_desk_bot.config import DESCRIPTION_MAX_LEN, USER_MAP_FILE
 from agromat_it_desk_bot.messages import Msg, render
 
 logger: logging.Logger = logging.getLogger(__name__)
+
+_DEFAULT_AUTHOR: str = '[невідомо]'
+_DEFAULT_STATUS: str = '[невідомо]'
+_DEFAULT_ASSIGNEE: str = '[не призначено]'
+
+
+def _stringify_issue_value(value: object | None) -> str | None:
+    """Повертає рядкове представлення значення з payload YouTrack."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        stripped: str = value.strip()
+        return stripped or None
+    if isinstance(value, list):
+        for item in value:
+            candidate: str | None = _stringify_issue_value(item)
+            if candidate:
+                return candidate
+        return None
+    if isinstance(value, Mapping):
+        for key in ('fullName', 'presentation', 'text', 'localizedName', 'name', 'login', 'email'):
+            candidate = value.get(key)
+            if isinstance(candidate, str):
+                stripped_candidate: str = candidate.strip()
+                if stripped_candidate:
+                    return stripped_candidate
+    return None
+
+
+def _extract_from_custom_fields(custom_fields: object, names: Iterable[str]) -> str | None:
+    """Повертає значення поля з переліку customFields."""
+    if not isinstance(custom_fields, list):
+        return None
+    normalized: set[str] = {name.casefold() for name in names if name}
+    if not normalized:
+        return None
+    for entry in custom_fields:
+        if not isinstance(entry, Mapping):
+            continue
+        field_name_obj: object | None = entry.get('name')
+        if not isinstance(field_name_obj, str):
+            continue
+        if field_name_obj.casefold() not in normalized:
+            continue
+        value_obj: object | None = entry.get('value')
+        extracted: str | None = _stringify_issue_value(value_obj)
+        if extracted:
+            return extracted
+    return None
+
+
+def extract_issue_status(issue: Mapping[str, object]) -> str | None:
+    """Повертає статус задачі з payload YouTrack."""
+    status: str | None = _stringify_issue_value(issue.get('status'))
+    if status:
+        return status
+    state: str | None = _stringify_issue_value(issue.get('state'))
+    if state:
+        return state
+    custom_fields: object = issue.get('customFields', [])
+    return _extract_from_custom_fields(custom_fields, {'status', 'state', 'Статус'})
+
+
+def extract_issue_assignee(issue: Mapping[str, object]) -> str | None:
+    """Повертає виконавця задачі з payload YouTrack."""
+    assignee: str | None = _stringify_issue_value(issue.get('assignee'))
+    if assignee:
+        return assignee
+    custom_fields: object = issue.get('customFields', [])
+    return _extract_from_custom_fields(custom_fields, {'assignee', 'Assignee', 'Виконавець'})
+
+
+def extract_issue_author(issue: Mapping[str, object]) -> str | None:
+    """Повертає автора (репортера) задачі з payload YouTrack."""
+    for key in ('author', 'reporter', 'createdBy'):
+        author_candidate: str | None = _stringify_issue_value(issue.get(key))
+        if author_candidate:
+            return author_candidate
+    return None
 
 
 class UserMapEntry(TypedDict, total=False):
@@ -89,20 +168,43 @@ def format_telegram_message(
     description_raw: str,
     url: str,
     *,
+<<<<<<< HEAD
     author: str | None = None,
     status: str | None = None,
     assignee: str | None = None,
 ) -> str:
     """Формує HTML-повідомлення для Telegram."""
+=======
+    assignee: str | None = None,
+    status: str | None = None,
+    author: str | None = None,
+) -> str:
+    """Формує HTML-повідомлення для Telegram.
+
+    :param issue_id: Короткий ідентифікатор задачі.
+    :param summary_raw: Назва задачі з вебхука або API.
+    :param description_raw: Опис задачі.
+    :param url: Посилання на задачу (може бути повідомленням про помилку).
+    :param assignee: Текстове представлення виконавця.
+    :param status: Людиночитний статус задачі.
+    :param author: Текстове представлення автора (репортера).
+    :returns: Готовий HTML текст повідомлення.
+    """
+>>>>>>> a622e9a (chore: оновлює повідомлення телеграм після прийняття заявки; прибирає перевірку прав на акаунт телеграм)
     formatted_issue_id: str = escape(issue_id)
-    summary: str = escape(summary_raw)
-    description: str = escape(description_raw)
+    summary_value: str = summary_raw.strip()
+    summary_formatted: str = escape(summary_value) if summary_value else ''
 
-    if len(description) == 0:
-        description = render(Msg.ERR_YT_DESCRIPTION_EMPTY)
-    elif len(description) > DESCRIPTION_MAX_LEN:
-        description = f'{description[:DESCRIPTION_MAX_LEN]}…'
+    description_source: str = description_raw.strip()
+    if not description_source:
+        description_text: str = render(Msg.ERR_YT_DESCRIPTION_EMPTY)
+    else:
+        description_candidate: str = escape(description_raw)
+        if len(description_candidate) > DESCRIPTION_MAX_LEN:
+            description_candidate = f'{description_candidate[:DESCRIPTION_MAX_LEN]}…'
+        description_text = description_candidate
 
+<<<<<<< HEAD
     def _format_person(value: str | None) -> str:
         cleaned: str = (value or '').strip()
         return escape(cleaned) if cleaned else '—'
@@ -125,6 +227,29 @@ def format_telegram_message(
         assignee=assignee_text,
         description=description,
     )
+=======
+    author_text: str = escape(author) if author else _DEFAULT_AUTHOR
+    status_text: str = escape(status) if status else _DEFAULT_STATUS
+    assignee_text: str = escape(assignee) if assignee else _DEFAULT_ASSIGNEE
+
+    header: str = f'Заявка {formatted_issue_id}'
+
+    url_clean: str = url.strip()
+    if url_clean and url_clean.lower().startswith(('http://', 'https://')):
+        header = f'<a href="{escape(url_clean, quote=True)}">{header}</a>'
+
+    if summary_formatted:
+        header = f'{header} — <b>{summary_formatted}</b>'
+
+    telegram_msg: str = TELEGRAM_MAIN_MESSAGE_TEMPLATE.format(
+        header=header,
+        author=author_text,
+        status=status_text,
+        assignee=assignee_text,
+        description=description_text,
+    )
+    return telegram_msg
+>>>>>>> a622e9a (chore: оновлює повідомлення телеграм після прийняття заявки; прибирає перевірку прав на акаунт телеграм)
 
 
 def resolve_from_map(tg_user_id: int | None) -> tuple[str | None, str | None, str | None]:

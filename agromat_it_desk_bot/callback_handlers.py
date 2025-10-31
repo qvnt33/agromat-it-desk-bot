@@ -9,12 +9,13 @@ from typing import Any, NamedTuple
 
 from fastapi import HTTPException, Request
 
-from agromat_it_desk_bot.auth import get_authorized_yt_user, is_authorized
-from agromat_it_desk_bot.config import ALLOWED_TG_USER_IDS, TELEGRAM_WEBHOOK_SECRET
+from agromat_it_desk_bot.auth import get_authorized_yt_user
+from agromat_it_desk_bot.config import TELEGRAM_WEBHOOK_SECRET, YOUTRACK_STATE_IN_PROGRESS, YT_BASE_URL
 from agromat_it_desk_bot.messages import Msg, render
 from agromat_it_desk_bot.telegram import context as telegram_context
 from agromat_it_desk_bot.telegram.telegram_sender import TelegramSender
-from agromat_it_desk_bot.youtrack.youtrack_service import assign_issue
+from agromat_it_desk_bot.utils import format_telegram_message
+from agromat_it_desk_bot.youtrack.youtrack_service import IssueDetails, assign_issue, fetch_issue_details
 
 logger: logging.Logger = logging.getLogger(__name__)
 _processed_accept_keys: set[str] = set()
@@ -98,31 +99,6 @@ def parse_callback_payload(payload: Any) -> CallbackContext | None:
     return context
 
 
-async def is_user_allowed(tg_user_id: int | None) -> bool:
-    """Перевіряє, чи має користувач право натискати кнопку "Прийняти".
-
-    :param tg_user_id: Telegram ID користувача.
-    :returns: ``True`` якщо користувач дозволений або whitelist порожній.
-    """
-    if tg_user_id is None:
-        return False
-
-    authorized: bool = await asyncio.to_thread(is_authorized, tg_user_id)
-    if not authorized:
-        logger.debug('Користувача не авторизовано: tg_user_id=%s', tg_user_id)
-        return False
-
-    if tg_user_id in ALLOWED_TG_USER_IDS:
-        logger.debug('Користувач у whitelist: tg_user_id=%s', tg_user_id)
-        return True
-
-    if not ALLOWED_TG_USER_IDS:
-        return True
-
-    logger.debug('Користувач поза whitelist: tg_user_id=%s', tg_user_id)
-    return False
-
-
 def parse_action(payload: str) -> tuple[str, str | None]:
     """Виділяє назву дії та параметр із callback-рядка.
 
@@ -145,20 +121,22 @@ async def handle_accept(issue_id: str, context: CallbackContext) -> None:
         await reply_assign_error(context.callback_id)
         return
 
+    try:
+        login, email, yt_user_id = await asyncio.to_thread(get_authorized_yt_user, context.tg_user_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception('Не вдалося знайти користувача для прийняття: %s', exc)
+        await reply_assign_error(context.callback_id)
+        return
+    if not any((login, email, yt_user_id)):
+        logger.info('Прийняття без авторизації: tg_user_id=%s issue_id=%s', context.tg_user_id, issue_id)
+        await reply_authorization_required(context.callback_id)
+        return
+
     key: str = f'{context.chat_id}:{context.message_id}:{issue_id}'
     is_new: bool = await _register_accept_attempt(key)
     if not is_new:
         logger.info('Ігнорують дубль callback для %s', key)
         await reply_success(context.callback_id)
-        return
-
-    try:
-        login, email, yt_user_id = await asyncio.to_thread(get_authorized_yt_user, context.tg_user_id)
-        if not any((login, email, yt_user_id)):
-            raise RuntimeError('Не знайдено мапінг користувача')
-    except Exception as exc:  # noqa: BLE001
-        logger.exception('Не вдалося знайти користувача для прийняття: %s', exc)
-        await reply_assign_error(context.callback_id)
         return
 
     assigned: bool = await asyncio.to_thread(assign_issue, issue_id, login, email, yt_user_id)
@@ -168,13 +146,9 @@ async def handle_accept(issue_id: str, context: CallbackContext) -> None:
         return
 
     await reply_success(context.callback_id)
+    await _update_issue_message(context.chat_id, context.message_id, issue_id, login, email)
     await remove_keyboard(context.chat_id, context.message_id)
     logger.info('Задачу призначено через callback: issue_id=%s tg_user_id=%s', issue_id, context.tg_user_id)
-
-
-async def reply_insufficient_rights(callback_id: str) -> None:
-    """Повідомляє про відсутність прав у користувача."""
-    await _sender().answer_callback(callback_id, text=render(Msg.ERR_CALLBACK_RIGHTS), show_alert=True)
 
 
 async def reply_unknown_action(callback_id: str) -> None:
@@ -197,6 +171,11 @@ async def reply_assign_error(callback_id: str) -> None:
     await _sender().answer_callback(callback_id, text=render(Msg.ERR_CALLBACK_ASSIGN_ERROR), show_alert=True)
 
 
+async def reply_authorization_required(callback_id: str) -> None:
+    """Пояснює, що потрібно авторизуватись перед прийняттям задачі."""
+    await _sender().answer_callback(callback_id, text=render(Msg.ERR_CALLBACK_AUTH_REQUIRED), show_alert=True)
+
+
 async def remove_keyboard(chat_id: int, message_id: int) -> None:
     """Прибирає клавіатуру з повідомлення Telegram після успішного прийняття."""
     try:
@@ -207,6 +186,75 @@ async def remove_keyboard(chat_id: int, message_id: int) -> None:
 
 def _sender() -> TelegramSender:
     return telegram_context.get_sender()
+
+
+async def _update_issue_message(
+    chat_id: int,
+    message_id: int,
+    issue_id: str,
+    login: str | None,
+    email: str | None,
+) -> None:
+    """Оновлює текст повідомлення Telegram після призначення задачі."""
+    details: IssueDetails | None = None
+    try:
+        details = await asyncio.to_thread(fetch_issue_details, issue_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception('Не вдалося отримати деталі задачі %s: %s', issue_id, exc)
+
+    summary: str = ''
+    description: str = ''
+    assignee_text: str | None = None
+    status_text: str | None = None
+    author_text: str | None = None
+
+    if details is not None:
+        summary = str(details.summary or '')
+        description = str(details.description or '')
+        assignee_text = details.assignee or login or email
+        status_text = details.status or YOUTRACK_STATE_IN_PROGRESS
+        author_text = details.author
+    else:
+        assignee_text = login or email
+        status_text = YOUTRACK_STATE_IN_PROGRESS
+
+    if assignee_text:
+        assignee_text = assignee_text.strip() or None
+    if status_text:
+        status_text = status_text.strip() or None
+    if author_text:
+        author_text = author_text.strip() or None
+
+    url: str = _resolve_issue_url(issue_id)
+
+    message_text: str = format_telegram_message(
+        issue_id,
+        summary,
+        description,
+        url,
+        assignee=assignee_text,
+        status=status_text,
+        author=author_text,
+    )
+
+    try:
+        await _sender().edit_message_text(
+            chat_id,
+            message_id,
+            message_text,
+            parse_mode='HTML',
+            reply_markup=None,
+            disable_web_page_preview=False,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug('Не вдалося оновити текст повідомлення: %s', exc)
+
+
+def _resolve_issue_url(issue_id: str) -> str:
+    """Формує URL задачі для використання в повідомленні."""
+    if issue_id and YT_BASE_URL:
+        return f'{YT_BASE_URL}/issue/{issue_id}'
+    return render(Msg.ERR_YT_ISSUE_NO_URL)
 
 
 async def _register_accept_attempt(key: str) -> bool:

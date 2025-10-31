@@ -12,6 +12,7 @@ from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
 
 logger: logging.Logger = logging.getLogger(__name__)
 
+
 def escape_html(text: str) -> str:
     """Безпечно екранує текст для HTML parse_mode."""
     return escape(text, quote=False)
@@ -46,6 +47,17 @@ class TelegramSender(Protocol):
         chat_id: int | str,
         message_id: int,
         reply_markup: dict[str, Any] | None,
+    ) -> None: ...
+
+    async def edit_message_text(
+        self,
+        chat_id: int | str,
+        message_id: int,
+        text: str,
+        *,
+        parse_mode: str | None = 'HTML',
+        reply_markup: dict[str, Any] | None = None,
+        disable_web_page_preview: bool = True,
     ) -> None: ...
 
 
@@ -116,6 +128,27 @@ class AiogramTelegramSender:
             chat_id=chat_id,
             message_id=message_id,
             reply_markup=reply_markup,
+            request_timeout=self._request_timeout,
+        )
+
+    async def edit_message_text(
+        self,
+        chat_id: int | str,
+        message_id: int,
+        text: str,
+        *,
+        parse_mode: str | None = 'HTML',
+        reply_markup: dict[str, Any] | None = None,
+        disable_web_page_preview: bool = True,
+    ) -> None:
+        await self._request_with_retry(
+            self._bot.edit_message_text,
+            chat_id=chat_id,
+            message_id=message_id,
+            text=text,
+            parse_mode=parse_mode,
+            reply_markup=reply_markup,
+            disable_web_page_preview=disable_web_page_preview,
             request_timeout=self._request_timeout,
         )
 

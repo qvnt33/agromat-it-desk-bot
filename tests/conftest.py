@@ -35,6 +35,7 @@ class FakeTelegramSender(TelegramSender):
         self.deleted_messages: list[dict[str, object]] = []
         self.callback_answers: list[dict[str, object]] = []
         self.edited_markup: list[dict[str, object]] = []
+        self.edited_text: list[dict[str, object]] = []
 
     async def send_message(
         self,
@@ -72,6 +73,26 @@ class FakeTelegramSender(TelegramSender):
         reply_markup: dict[str, object] | None,
     ) -> None:
         self.edited_markup.append({'chat_id': chat_id, 'message_id': message_id, 'reply_markup': reply_markup})
+
+    async def edit_message_text(
+        self,
+        chat_id: int | str,
+        message_id: int,
+        text: str,
+        *,
+        parse_mode: str | None = 'HTML',
+        reply_markup: dict[str, object] | None = None,
+        disable_web_page_preview: bool = True,
+    ) -> None:
+        payload: dict[str, object] = {
+            'chat_id': chat_id,
+            'message_id': message_id,
+            'text': text,
+            'parse_mode': parse_mode,
+            'reply_markup': reply_markup,
+            'disable_web_page_preview': disable_web_page_preview,
+        }
+        self.edited_text.append(payload)
 
 
 @pytest.fixture(autouse=True)
