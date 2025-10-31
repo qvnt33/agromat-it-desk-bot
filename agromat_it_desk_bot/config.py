@@ -51,8 +51,6 @@ YOUTRACK_ASSIGNEE_FIELD_NAME: str = os.getenv('YOUTRACK_ASSIGNEE_FIELD_NAME', 'A
 # Поле статусу та значення для режиму «В роботі»
 YOUTRACK_STATE_FIELD_NAME: str | None = os.getenv('YOUTRACK_STATE_FIELD_NAME')
 YOUTRACK_STATE_IN_PROGRESS: str | None = os.getenv('YOUTRACK_STATE_IN_PROGRESS')
-<<<<<<< HEAD
-=======
 
 # Шаблони текстів
 TELEGRAM_MAIN_MESSAGE_TEMPLATE = (
@@ -64,4 +62,3 @@ TELEGRAM_MAIN_MESSAGE_TEMPLATE = (
     '\n'
     '{description}'
 )
->>>>>>> a622e9a (chore: оновлює повідомлення телеграм після прийняття заявки; прибирає перевірку прав на акаунт телеграм)

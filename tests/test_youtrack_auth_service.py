@@ -64,7 +64,7 @@ def test_validate_token_success(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_normalize_user_prefers_email_field() -> None:
     """normalize_user має повертати email з верхнього рівня відповіді."""
     login, email, yt_user_id = auth_service.normalize_user(
-        {'id': 'YT-77', 'login': 'agent', 'email': 'agent@example.com'}
+        {'id': 'YT-77', 'login': 'agent', 'email': 'agent@example.com'},
     )
 
     assert login == 'agent'

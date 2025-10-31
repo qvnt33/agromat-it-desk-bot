@@ -80,7 +80,7 @@ handle_reconnect_shortcut = telegram_commands.handle_reconnect_shortcut
 
 
 @app.post('/youtrack')
-async def youtrack_webhook(request: Request) -> dict[str, bool]:
+async def youtrack_webhook(request: Request) -> dict[str, bool]:  # noqa: C901
     """Обробляє вебхук від YouTrack та повідомляє Telegram.
 
     :param request: Запит FastAPI з тілом вебхука.
@@ -117,7 +117,7 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:
     if not author:
         rep_obj = issue.get('reporter')
         if isinstance(rep_obj, dict):
-            author = (rep_obj.get('fullName') or rep_obj.get('login') or '')  # type: ignore[assignment]
+            author = str(rep_obj.get('fullName') or rep_obj.get('login') or '')
 
     status_name: str = get_str(issue, 'status')
 
@@ -137,7 +137,10 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:
                         n = v.get('name')
                         if isinstance(n, str) and n:
                             status_name = n
-                if nm in ('Assignee', 'Assignees', 'Виконавець', 'Виконавці') and assignee_label == render(Msg.YT_ISSUE_NO_ID):
+                if (
+                    nm in ('Assignee', 'Assignees', 'Виконавець', 'Виконавці')
+                    and assignee_label == render(Msg.NOT_ASSIGNED)
+                ):
                     v = cf.get('value')
                     names: list[str] = []
                     if isinstance(v, dict):
@@ -175,17 +178,15 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:
         url_val = render(Msg.ERR_YT_ISSUE_NO_URL)
     logger.debug('YouTrack webhook: resolved_url=%s', url_val)
 
-<<<<<<< HEAD
-    telegram_msg: str = format_telegram_message(
-        issue_id,
-        summary,
-        description,
-        url_val,
-        author=author,
-        status=status_name,
-        assignee=assignee_label,
-    )
-=======
+    if not status_text:
+        status_text = status_name or None
+    if not assignee_text:
+        assignee_candidate: str = assignee_label.strip()
+        if assignee_candidate and assignee_candidate != render(Msg.NOT_ASSIGNED):
+            assignee_text = assignee_candidate
+    if not author_text:
+        author_text = author.strip() or None
+
     telegram_msg: str = format_telegram_message(issue_id,
                                                 summary,
                                                 description,
@@ -193,7 +194,6 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:
                                                 assignee=assignee_text,
                                                 status=status_text,
                                                 author=author_text)
->>>>>>> a622e9a (chore: оновлює повідомлення телеграм після прийняття заявки; прибирає перевірку прав на акаунт телеграм)
     logger.debug('YouTrack webhook: message_length=%s', len(telegram_msg))
 
     # Inline-клавіатура з кнопкою прийняття

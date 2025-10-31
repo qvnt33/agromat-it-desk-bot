@@ -10,7 +10,7 @@ from html import escape
 from pathlib import Path
 from typing import Any, TypedDict
 
-from agromat_it_desk_bot.config import DESCRIPTION_MAX_LEN, USER_MAP_FILE
+from agromat_it_desk_bot.config import DESCRIPTION_MAX_LEN, TELEGRAM_MAIN_MESSAGE_TEMPLATE, USER_MAP_FILE
 from agromat_it_desk_bot.messages import Msg, render
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -168,13 +168,6 @@ def format_telegram_message(
     description_raw: str,
     url: str,
     *,
-<<<<<<< HEAD
-    author: str | None = None,
-    status: str | None = None,
-    assignee: str | None = None,
-) -> str:
-    """Формує HTML-повідомлення для Telegram."""
-=======
     assignee: str | None = None,
     status: str | None = None,
     author: str | None = None,
@@ -190,7 +183,6 @@ def format_telegram_message(
     :param author: Текстове представлення автора (репортера).
     :returns: Готовий HTML текст повідомлення.
     """
->>>>>>> a622e9a (chore: оновлює повідомлення телеграм після прийняття заявки; прибирає перевірку прав на акаунт телеграм)
     formatted_issue_id: str = escape(issue_id)
     summary_value: str = summary_raw.strip()
     summary_formatted: str = escape(summary_value) if summary_value else ''
@@ -204,30 +196,6 @@ def format_telegram_message(
             description_candidate = f'{description_candidate[:DESCRIPTION_MAX_LEN]}…'
         description_text = description_candidate
 
-<<<<<<< HEAD
-    def _format_person(value: str | None) -> str:
-        cleaned: str = (value or '').strip()
-        return escape(cleaned) if cleaned else '—'
-
-    author_text: str = _format_person(author)
-    assignee_text: str = _format_person(assignee)
-    status_clean: str = (status or '').strip()
-    status_text: str = escape(status_clean) if status_clean else '—'
-
-    issue_label: str = f'Заявка {formatted_issue_id}'
-    if isinstance(url, str) and url.startswith('http'):
-        issue_label = f'<a href="{escape(url, quote=True)}">{issue_label}</a>'
-
-    return render(
-        Msg.TELEGRAM_ISSUE,
-        issue_link=issue_label,
-        summary=summary,
-        author=author_text,
-        status=status_text,
-        assignee=assignee_text,
-        description=description,
-    )
-=======
     author_text: str = escape(author) if author else _DEFAULT_AUTHOR
     status_text: str = escape(status) if status else _DEFAULT_STATUS
     assignee_text: str = escape(assignee) if assignee else _DEFAULT_ASSIGNEE
@@ -249,7 +217,6 @@ def format_telegram_message(
         description=description_text,
     )
     return telegram_msg
->>>>>>> a622e9a (chore: оновлює повідомлення телеграм після прийняття заявки; прибирає перевірку прав на акаунт телеграм)
 
 
 def resolve_from_map(tg_user_id: int | None) -> tuple[str | None, str | None, str | None]:

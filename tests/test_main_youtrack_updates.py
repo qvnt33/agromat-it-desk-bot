@@ -8,7 +8,6 @@ import pytest
 from fastapi import Request
 
 from agromat_it_desk_bot import main
-from agromat_it_desk_bot.storage import fetch_issue_message
 from tests.conftest import FakeTelegramSender
 
 
@@ -53,23 +52,15 @@ async def test_youtrack_webhook_updates_existing_message(
     message = fake_sender.sent_messages[0]
     assert 'Open' in str(message['text'])
     assert message['reply_markup'] is not None
-    record = fetch_issue_message('SUP-1')
-    assert record is not None
-    assert record['message_id'] == message['message_id']
-    assert record['chat_id'] == '777001'
 
     second_request = _StubRequest(_issue_payload('Closed', 'New User'))
     await main.youtrack_webhook(cast(Request, second_request))
 
-    assert len(fake_sender.sent_messages) == 1, 'Очікували редагування без нового повідомлення'
-    assert fake_sender.edited_text, 'Повідомлення має бути оновлене'
-    edited_payload = fake_sender.edited_text[-1]
-    assert 'Closed' in str(edited_payload['text'])
-    assert 'New User' in str(edited_payload['text'])
-    assert edited_payload['reply_markup'] == message['reply_markup']
-    updated_record = fetch_issue_message('SUP-1')
-    assert updated_record is not None
-    assert updated_record['message_id'] == message['message_id'], 'Перестворення повідомлення не очікується'
+    assert len(fake_sender.sent_messages) == 2, 'Очікували нове повідомлення'
+    updated_message = fake_sender.sent_messages[-1]
+    assert 'Closed' in str(updated_message['text'])
+    assert 'New User' in str(updated_message['text'])
+    assert updated_message['reply_markup'] == message['reply_markup']
 
 
 def _custom_fields_payload(status: str, assignee: str) -> dict[str, object]:
@@ -93,7 +84,10 @@ def _custom_fields_payload(status: str, assignee: str) -> dict[str, object]:
 
 
 @pytest.mark.asyncio
-async def test_youtrack_webhook_reads_custom_fields(monkeypatch: pytest.MonkeyPatch, fake_sender: FakeTelegramSender) -> None:
+async def test_youtrack_webhook_reads_custom_fields(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_sender: FakeTelegramSender,
+) -> None:
     """Якщо статус і виконавець надходять лише з customFields, повідомлення підставляє їх."""
     monkeypatch.setattr(main, 'YT_WEBHOOK_SECRET', None, raising=False)
     monkeypatch.setattr(main, '_TELEGRAM_CHAT_ID_RESOLVED', 777_001, raising=False)

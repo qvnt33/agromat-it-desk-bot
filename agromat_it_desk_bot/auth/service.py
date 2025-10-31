@@ -42,7 +42,7 @@ class RegistrationOutcome(str, Enum):
     FOREIGN_OWNER = 'foreign_owner'
 
 
-def register_user(tg_user_id: int, token_plain: str) -> RegistrationOutcome:
+def register_user(tg_user_id: int, token_plain: str) -> RegistrationOutcome:  # noqa: C901
     """Реєструє користувача на основі персонального токена YouTrack.
 
     :param tg_user_id: Ідентифікатор користувача Telegram.

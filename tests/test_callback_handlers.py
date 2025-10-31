@@ -1,6 +1,7 @@
 """Перевіряє обробку callback'ів прийняття задачі."""
 
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -122,5 +123,5 @@ async def test_handle_accept_requires_auth_every_time(
     await handlers.handle_accept('SUP-4', callback_context)
 
     auth_required_text: str = render(Msg.ERR_CALLBACK_AUTH_REQUIRED)
-    shown: list[str | None] = [answer['text'] for answer in fake_sender.callback_answers]
+    shown: list[str | None] = [cast(str | None, answer['text']) for answer in fake_sender.callback_answers]
     assert shown == [auth_required_text, auth_required_text]

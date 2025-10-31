@@ -71,13 +71,13 @@ def migrate() -> None:
 def _ensure_columns(connection: sqlite3.Connection) -> None:
     """Гарантує наявність обовʼязкових полів у таблиці users."""
     cursor = connection.cursor()
-    cursor.execute("PRAGMA table_info(users)")
+    cursor.execute('PRAGMA table_info(users)')
     columns: set[str] = {str(row['name']) for row in cursor.fetchall()}
 
     if 'registered_at' not in columns:
-        cursor.execute("ALTER TABLE users ADD COLUMN registered_at TEXT")
+        cursor.execute('ALTER TABLE users ADD COLUMN registered_at TEXT')
     if 'updated_at' not in columns:
-        cursor.execute("ALTER TABLE users ADD COLUMN updated_at TEXT")
+        cursor.execute('ALTER TABLE users ADD COLUMN updated_at TEXT')
     connection.commit()
 
 
@@ -135,7 +135,7 @@ def _ensure_unique_index(connection: sqlite3.Connection) -> None:
     cursor.execute("PRAGMA index_list('users')")
     existing_indexes: set[str] = {str(row['name']) for row in cursor.fetchall()}
     if 'idx_users_yt_user_id' in existing_indexes:
-        cursor.execute("DROP INDEX idx_users_yt_user_id")
+        cursor.execute('DROP INDEX idx_users_yt_user_id')
     cursor.execute(
         """
         CREATE UNIQUE INDEX IF NOT EXISTS idx_users_yt_user_id_unique
@@ -258,10 +258,13 @@ def upsert_user(record: UserRecord) -> None:
                 payload,
             )
         else:
-            existing_registered: object | None = existing['registered_at'] if 'registered_at' in existing.keys() else None
+            existing_keys = existing.keys()
+            existing_registered: object | None = (
+                existing['registered_at'] if 'registered_at' in existing_keys else None
+            )
             if payload['registered_at'] is None:
-                fallback_registered: object | None = existing_registered or existing['created_at']
-                payload['registered_at'] = str(fallback_registered or now)
+                registered_source: object | None = existing_registered or existing['created_at']
+                payload['registered_at'] = str(registered_source or now)
             cursor.execute(
                 """
                 UPDATE users

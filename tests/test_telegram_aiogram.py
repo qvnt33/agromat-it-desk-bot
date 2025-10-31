@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 
 import pytest
@@ -29,6 +30,7 @@ async def test_on_text_ignores_non_token_text(monkeypatch: pytest.MonkeyPatch) -
         assert chat_id == 500
         assert payload['text'] == 'привіт'
         assert text == 'привіт'
+        await asyncio.sleep(0)
         return False
 
     monkeypatch.setattr(telegram_aiogram, 'handle_token_submission', fake_submission)
@@ -44,6 +46,7 @@ async def test_on_text_accepts_token(monkeypatch: pytest.MonkeyPatch) -> None:
         assert chat_id == 500
         assert payload['text'] == 'token-123'
         assert text == 'token-123'
+        await asyncio.sleep(0)
         return True
 
     monkeypatch.setattr(telegram_aiogram, 'handle_token_submission', fake_submission)

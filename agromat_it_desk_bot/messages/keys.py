@@ -29,6 +29,7 @@ class Msg(str, Enum):
     YT_ISSUE_NO_ID = 'utils.issue_no_id'
     CONNECT_START_NEW = 'connect.start_new'
     CONNECT_START_REGISTERED = 'connect.start_registered'
+    CONNECT_HELP = 'connect.help'
     CONNECT_GUIDE_BUTTON = 'connect.guide_button'
     CONNECT_EXPECTS_TOKEN = 'connect.expects_token'
     CONNECT_SUCCESS_NEW = 'connect.success_new'

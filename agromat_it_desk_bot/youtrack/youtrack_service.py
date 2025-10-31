@@ -12,10 +12,7 @@ from .youtrack_client import (
     YouTrackUser,
     assign_custom_field,
     fetch_issue_custom_fields,
-<<<<<<< HEAD
-=======
     fetch_issue_overview,
->>>>>>> a622e9a (chore: оновлює повідомлення телеграм після прийняття заявки; прибирає перевірку прав на акаунт телеграм)
     find_state_value_id,
     find_user,
     find_user_id,
