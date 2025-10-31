@@ -62,6 +62,16 @@ def migrate() -> None:
             )
             """,
         )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS issue_messages (
+                issue_id TEXT PRIMARY KEY,
+                chat_id TEXT NOT NULL,
+                message_id INTEGER NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """,
+        )
         connection.commit()
         _ensure_columns(connection)
         _backfill_registered_at(connection)
@@ -365,6 +375,59 @@ def deactivate_user(tg_user_id: int) -> None:
             (now, now, tg_user_id),
         )
         connection.commit()
+
+
+def upsert_issue_message(issue_id: str, chat_id: int | str, message_id: int) -> None:
+    """Зберігає або оновлює зв'язок між задачею та повідомленням Telegram."""
+    now: str = _utcnow()
+    chat_value: str = str(chat_id)
+    with _connect() as connection:
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS issue_messages (
+                issue_id TEXT PRIMARY KEY,
+                chat_id TEXT NOT NULL,
+                message_id INTEGER NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """,
+        )
+        cursor.execute(
+            """
+            INSERT INTO issue_messages(issue_id, chat_id, message_id, updated_at)
+            VALUES(?, ?, ?, ?)
+            ON CONFLICT(issue_id) DO UPDATE SET
+                chat_id = excluded.chat_id,
+                message_id = excluded.message_id,
+                updated_at = excluded.updated_at
+            """,
+            (issue_id, chat_value, message_id, now),
+        )
+        connection.commit()
+
+
+def fetch_issue_message(issue_id: str) -> dict[str, str | int] | None:
+    """Повертає інформацію про повідомлення Telegram для задачі."""
+    with _connect() as connection:
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            SELECT issue_id, chat_id, message_id, updated_at
+            FROM issue_messages
+            WHERE issue_id = ?
+            """,
+            (issue_id,),
+        )
+        row: sqlite3.Row | None = cursor.fetchone()
+        if row is None:
+            return None
+        return {
+            'issue_id': str(row['issue_id']),
+            'chat_id': str(row['chat_id']),
+            'message_id': int(row['message_id']),
+            'updated_at': str(row['updated_at']),
+        }
 
 
 def touch_last_seen(tg_user_id: int) -> None:

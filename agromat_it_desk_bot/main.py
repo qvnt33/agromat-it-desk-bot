@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
@@ -14,6 +15,7 @@ from fastapi import FastAPI, HTTPException, Request
 from agromat_it_desk_bot.callback_handlers import verify_telegram_secret
 from agromat_it_desk_bot.config import BOT_TOKEN, TELEGRAM_CHAT_ID, YT_BASE_URL, YT_WEBHOOK_SECRET
 from agromat_it_desk_bot.messages import Msg, render
+from agromat_it_desk_bot.storage import fetch_issue_message, upsert_issue_message
 from agromat_it_desk_bot.telegram import context as telegram_context
 from agromat_it_desk_bot.telegram import telegram_aiogram, telegram_commands
 from agromat_it_desk_bot.telegram.telegram_sender import AiogramTelegramSender
@@ -38,6 +40,81 @@ try:
     _TELEGRAM_CHAT_ID_RESOLVED = int(TELEGRAM_CHAT_ID)
 except ValueError:
     _TELEGRAM_CHAT_ID_RESOLVED = TELEGRAM_CHAT_ID
+
+
+def _prepare_issue_payload(  # noqa: C901
+    issue: Mapping[str, object],
+) -> tuple[str, str, str, str, str | None, str | None, str | None]:
+    issue_id: str = extract_issue_id(issue)
+    summary: str = get_str(issue, 'summary')
+    description: str = get_str(issue, 'description')
+
+    author_raw: str = get_str(issue, 'author')
+    if not author_raw:
+        reporter_obj = issue.get('reporter')
+        if isinstance(reporter_obj, Mapping):
+            extracted_author: str = str(
+                reporter_obj.get('fullName')
+                or reporter_obj.get('login')
+                or reporter_obj.get('name')
+                or '',
+            )
+            author_raw = extracted_author
+
+    status_raw: str = get_str(issue, 'status')
+    assignee_label: str = get_str(issue, 'assignee') or render(Msg.NOT_ASSIGNED)
+
+    custom_fields_obj: object | None = issue.get('customFields')
+    if (not status_raw or assignee_label == render(Msg.YT_ISSUE_NO_ID)) and isinstance(custom_fields_obj, list):
+        for field in custom_fields_obj:
+            if not isinstance(field, Mapping):
+                continue
+            name_value: object | None = field.get('name')
+            name_lower: str | None = str(name_value) if isinstance(name_value, str) else None
+            if name_lower in {'статус', 'state'} and not status_raw:
+                field_value = field.get('value')
+                if isinstance(field_value, Mapping):
+                    status_candidate: object | None = field_value.get('name')
+                    if isinstance(status_candidate, str) and status_candidate:
+                        status_raw = status_candidate
+            if (
+                name_lower in {'assignee', 'assignees', 'виконавець', 'виконавці'}
+                and assignee_label == render(Msg.NOT_ASSIGNED)
+            ):
+                field_value = field.get('value')
+                names: list[str] = []
+                if isinstance(field_value, Mapping):
+                    extracted = field_value.get('fullName') or field_value.get('login') or field_value.get('name')
+                    if isinstance(extracted, str) and extracted:
+                        names = [extracted]
+                elif isinstance(field_value, list):
+                    for candidate in field_value:
+                        if isinstance(candidate, Mapping):
+                            val = candidate.get('fullName') or candidate.get('login') or candidate.get('name')
+                            if isinstance(val, str) and val:
+                                names.append(val)
+                if names:
+                    assignee_label = ', '.join(names)
+
+    issue_id_unknown_msg: str = render(Msg.YT_ISSUE_NO_ID)
+    url_field: object | None = issue.get('url')
+    url_val: str
+    if isinstance(url_field, str) and url_field:
+        url_val = url_field
+    elif issue_id and issue_id != issue_id_unknown_msg and YT_BASE_URL:
+        url_val = f'{YT_BASE_URL}/issue/{issue_id}'
+    else:
+        url_val = render(Msg.ERR_YT_ISSUE_NO_URL)
+
+    status_text: str | None = extract_issue_status(issue) or status_raw or None
+    assignee_text: str | None = extract_issue_assignee(issue)
+    if not assignee_text:
+        assignee_candidate: str = assignee_label.strip()
+        if assignee_candidate and assignee_candidate != render(Msg.NOT_ASSIGNED):
+            assignee_text = assignee_candidate
+    author_text: str | None = extract_issue_author(issue) or author_raw.strip() or None
+
+    return issue_id, summary, description, url_val, assignee_text, status_text, author_text
 
 
 @asynccontextmanager
@@ -81,142 +158,111 @@ handle_reconnect_shortcut = telegram_commands.handle_reconnect_shortcut
 
 @app.post('/youtrack')
 async def youtrack_webhook(request: Request) -> dict[str, bool]:  # noqa: C901
-    """Обробляє вебхук від YouTrack та повідомляє Telegram.
-
-    :param request: Запит FastAPI з тілом вебхука.
-    :returns: Словник ``{"ok": True}`` у разі успішного виконання.
-    :raises HTTPException: 400 при некоректному пейлоаді; 403 при невірному секреті.
-    """
+    """Обробляє вебхук від YouTrack та повідомляє Telegram."""
     payload: Any = await request.json()
 
     if not isinstance(payload, dict):
-        # Перевірка формату JSON
         raise HTTPException(status_code=400, detail='Некоректний формат тіла запиту')
 
     if YT_WEBHOOK_SECRET is not None:
         auth_header: str | None = request.headers.get('Authorization')
         expected: str = f'Bearer {YT_WEBHOOK_SECRET}'
-
         if auth_header != expected:
-            # Контроль секрету YouTrack
             logger.warning('Невірний секрет YouTrack вебхука')
             raise HTTPException(status_code=403, detail='Доступ заборонено')
 
     logger.info('Отримано вебхук YouTrack: %s', payload)
 
-    # Дані задачі вебхука
     issue_candidate: object | None = payload.get('issue')
     issue: Mapping[str, object] = issue_candidate if isinstance(issue_candidate, dict) else payload
 
-    issue_id: str = extract_issue_id(issue)
-    summary: str = get_str(issue, 'summary')
-    description: str = get_str(issue, 'description')
-
-    # Дані з оновленого workflow-пейлоада (з фолбеками)
-    author: str = get_str(issue, 'author')
-    if not author:
-        rep_obj = issue.get('reporter')
-        if isinstance(rep_obj, dict):
-            author = str(rep_obj.get('fullName') or rep_obj.get('login') or '')
-
-    status_name: str = get_str(issue, 'status')
-
-    assignee_label: str = get_str(issue, 'assignee') or render(Msg.NOT_ASSIGNED)
-
-    # Якщо полів немає в payload, спробувати дістати з customFields (старі вебхуки)
-    if not status_name or assignee_label == render(Msg.YT_ISSUE_NO_ID):
-        cfs = issue.get('customFields')
-        if isinstance(cfs, list):
-            for cf in cfs:
-                if not isinstance(cf, dict):
-                    continue
-                nm = cf.get('name')
-                if nm in ('Статус', 'State') and not status_name:
-                    v = cf.get('value')
-                    if isinstance(v, dict):
-                        n = v.get('name')
-                        if isinstance(n, str) and n:
-                            status_name = n
-                if (
-                    nm in ('Assignee', 'Assignees', 'Виконавець', 'Виконавці')
-                    and assignee_label == render(Msg.NOT_ASSIGNED)
-                ):
-                    v = cf.get('value')
-                    names: list[str] = []
-                    if isinstance(v, dict):
-                        val = v.get('fullName') or v.get('login') or v.get('name')
-                        if isinstance(val, str) and val:
-                            names = [val]
-                    elif isinstance(v, list):
-                        for u in v:
-                            if isinstance(u, dict):
-                                val = u.get('fullName') or u.get('login') or u.get('name')
-                                if isinstance(val, str) and val:
-                                    names.append(val)
-                    if names:
-                        assignee_label = ', '.join(names)
+    issue_id, summary, description, url_val, assignee_text, status_text, author_text = _prepare_issue_payload(issue)
 
     logger.debug('YouTrack webhook: issue_id=%s summary=%s', issue_id, summary)
-
-    url_val: str | None = None  # Посилання на задачу для повідомлення
-    url_field: object | None = issue.get('url')  # Поле URL з вебхука YouTrack
-
-    issue_id_unknown_msg: str = render(Msg.YT_ISSUE_NO_ID)  # Текст маркера невідомого ID задачі
-
-    status_text: str | None = extract_issue_status(issue)
-    assignee_text: str | None = extract_issue_assignee(issue)
-    author_text: str | None = extract_issue_author(issue)
-
-    if isinstance(url_field, str) and url_field:
-        # Використання посилання з вебхука
-        url_val = url_field
-    elif issue_id != issue_id_unknown_msg and YT_BASE_URL:
-        # Формування посилання на задачу в YouTrack
-        url_val = f'{YT_BASE_URL}/issue/{issue_id}'
-    elif url_val is None:
-        # Повідомлення, що невідомо URL заявки
-        url_val = render(Msg.ERR_YT_ISSUE_NO_URL)
     logger.debug('YouTrack webhook: resolved_url=%s', url_val)
 
-    if not status_text:
-        status_text = status_name or None
-    if not assignee_text:
-        assignee_candidate: str = assignee_label.strip()
-        if assignee_candidate and assignee_candidate != render(Msg.NOT_ASSIGNED):
-            assignee_text = assignee_candidate
-    if not author_text:
-        author_text = author.strip() or None
+    telegram_msg: str = format_telegram_message(
+        issue_id,
+        summary,
+        description,
+        url_val,
+        assignee=assignee_text,
+        status=status_text,
+        author=author_text,
+    )
 
-    telegram_msg: str = format_telegram_message(issue_id,
-                                                summary,
-                                                description,
-                                                url_val,
-                                                assignee=assignee_text,
-                                                status=status_text,
-                                                author=author_text)
-    logger.debug('YouTrack webhook: message_length=%s', len(telegram_msg))
-
-    # Inline-клавіатура з кнопкою прийняття
     reply_markup: dict[str, object] | None = None
+    issue_id_unknown_msg: str = render(Msg.YT_ISSUE_NO_ID)
     if issue_id and issue_id != issue_id_unknown_msg:
         button_text: str = render(Msg.TG_BTN_ACCEPT_ISSUE)
         reply_markup = {
-            # Додавання кнопки прийняття задачі
             'inline_keyboard': [[{'text': button_text, 'callback_data': f'accept|{issue_id}'}]],
         }
-        logger.debug('YouTrack webhook: inline keyboard prepared for %s', issue_id)
-
-    issue_label: str = issue_id if issue_id and issue_id != issue_id_unknown_msg else issue_id_unknown_msg
-    logger.info('Підготовано повідомлення для задачі %s', issue_label)
 
     sender = telegram_context.get_sender()
-    await sender.send_message(
+    message_id: int = await sender.send_message(
         _TELEGRAM_CHAT_ID_RESOLVED,
         telegram_msg,
         parse_mode='HTML',
         reply_markup=reply_markup,
         disable_web_page_preview=False,
     )
+    await asyncio.to_thread(upsert_issue_message, issue_id, _TELEGRAM_CHAT_ID_RESOLVED, message_id)
+    return {'ok': True}
+
+
+@app.post('/youtrack/update')
+async def youtrack_update(request: Request) -> dict[str, bool]:  # noqa: C901
+    """Оновлює наявне повідомлення Telegram після змін у задачі YouTrack."""
+    payload: Any = await request.json()
+
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail='Некоректний формат тіла запиту')
+
+    if YT_WEBHOOK_SECRET is not None:
+        auth_header: str | None = request.headers.get('Authorization')
+        expected: str = f'Bearer {YT_WEBHOOK_SECRET}'
+        if auth_header != expected:
+            logger.warning('Невірний секрет YouTrack вебхука (update)')
+            raise HTTPException(status_code=403, detail='Доступ заборонено')
+
+    issue_id, summary, description, url_val, assignee_text, status_text, author_text = _prepare_issue_payload(payload)
+
+    logger.info('Оновлення задачі %s через update вебхук', issue_id)
+
+    record = await asyncio.to_thread(fetch_issue_message, issue_id)
+    if record is None:
+        logger.info('Повідомлення для задачі %s не знайдено, пропускаю update', issue_id)
+        return {'ok': False}
+
+    chat_id_raw: str = str(record['chat_id'])
+    chat_id: int | str
+    try:
+        chat_id = int(chat_id_raw)
+    except ValueError:
+        chat_id = chat_id_raw
+    message_id: int = int(record['message_id'])
+
+    telegram_msg: str = format_telegram_message(
+        issue_id,
+        summary,
+        description,
+        url_val,
+        assignee=assignee_text,
+        status=status_text,
+        author=author_text,
+    )
+
+    sender = telegram_context.get_sender()
+    await sender.edit_message_text(
+        chat_id,
+        message_id,
+        telegram_msg,
+        parse_mode='HTML',
+        reply_markup=None,
+        disable_web_page_preview=False,
+    )
+    await asyncio.to_thread(upsert_issue_message, issue_id, chat_id_raw, message_id)
     return {'ok': True}
 
 

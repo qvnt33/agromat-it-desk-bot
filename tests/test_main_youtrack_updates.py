@@ -54,13 +54,14 @@ async def test_youtrack_webhook_updates_existing_message(
     assert message['reply_markup'] is not None
 
     second_request = _StubRequest(_issue_payload('Closed', 'New User'))
-    await main.youtrack_webhook(cast(Request, second_request))
+    await main.youtrack_update(cast(Request, second_request))
 
-    assert len(fake_sender.sent_messages) == 2, 'Очікували нове повідомлення'
-    updated_message = fake_sender.sent_messages[-1]
-    assert 'Closed' in str(updated_message['text'])
-    assert 'New User' in str(updated_message['text'])
-    assert updated_message['reply_markup'] == message['reply_markup']
+    assert len(fake_sender.sent_messages) == 1, 'Очікували редагування без нового повідомлення'
+    assert fake_sender.edited_text, 'Повідомлення має бути оновлене'
+    edited_payload = fake_sender.edited_text[-1]
+    assert 'Closed' in str(edited_payload['text'])
+    assert 'New User' in str(edited_payload['text'])
+    assert edited_payload['reply_markup'] is None
 
 
 def _custom_fields_payload(status: str, assignee: str) -> dict[str, object]:

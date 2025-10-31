@@ -5,10 +5,12 @@ from .database import (
     ProjectConfigurationError,
     UserRecord,
     deactivate_user,
+    fetch_issue_message,
     fetch_user_by_tg_id,
     fetch_user_by_yt_id,
     migrate,
     touch_last_seen,
+    upsert_issue_message,
     upsert_user,
 )
 
@@ -17,9 +19,11 @@ __all__ = [
     'ProjectConfigurationError',
     'UserRecord',
     'deactivate_user',
+    'fetch_issue_message',
     'fetch_user_by_tg_id',
     'fetch_user_by_yt_id',
     'migrate',
     'touch_last_seen',
+    'upsert_issue_message',
     'upsert_user',
 ]

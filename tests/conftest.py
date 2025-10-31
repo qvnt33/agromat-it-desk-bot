@@ -36,6 +36,7 @@ class FakeTelegramSender(TelegramSender):
         self.callback_answers: list[dict[str, object]] = []
         self.edited_markup: list[dict[str, object]] = []
         self.edited_text: list[dict[str, object]] = []
+        self._message_counter: int = 1_000
 
     async def send_message(
         self,
@@ -45,14 +46,18 @@ class FakeTelegramSender(TelegramSender):
         parse_mode: str | None = 'HTML',
         reply_markup: dict[str, object] | None = None,
         disable_web_page_preview: bool = True,
-    ) -> None:
+    ) -> int:
+        message_id: int = self._message_counter
+        self._message_counter += 1
         self.sent_messages.append({
             'chat_id': chat_id,
             'text': text,
             'parse_mode': parse_mode,
             'reply_markup': reply_markup,
             'disable_web_page_preview': disable_web_page_preview,
+            'message_id': message_id,
         })
+        return message_id
 
     async def delete_message(self, chat_id: int | str, message_id: int) -> None:
         self.deleted_messages.append({'chat_id': chat_id, 'message_id': message_id})

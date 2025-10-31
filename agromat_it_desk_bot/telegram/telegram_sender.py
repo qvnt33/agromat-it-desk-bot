@@ -30,7 +30,7 @@ class TelegramSender(Protocol):
         parse_mode: str | None = 'HTML',
         reply_markup: dict[str, Any] | None = None,
         disable_web_page_preview: bool = True,
-    ) -> None: ...
+    ) -> int: ...
 
     async def delete_message(self, chat_id: int | str, message_id: int) -> None: ...
 
@@ -83,8 +83,8 @@ class AiogramTelegramSender:
         parse_mode: str | None = 'HTML',
         reply_markup: dict[str, Any] | None = None,
         disable_web_page_preview: bool = True,
-    ) -> None:
-        await self._request_with_retry(
+    ) -> int:
+        message = await self._request_with_retry(
             self._bot.send_message,
             chat_id=chat_id,
             text=text,
@@ -93,6 +93,7 @@ class AiogramTelegramSender:
             disable_web_page_preview=disable_web_page_preview,
             request_timeout=self._request_timeout,
         )
+        return int(message.message_id)
 
     async def delete_message(self, chat_id: int | str, message_id: int) -> None:
         await self._request_with_retry(
@@ -152,12 +153,11 @@ class AiogramTelegramSender:
             request_timeout=self._request_timeout,
         )
 
-    async def _request_with_retry(self, method: Any, /, **kwargs: Any) -> None:
+    async def _request_with_retry(self, method: Any, /, **kwargs: Any) -> Any:
         attempt: int = 0
         while True:
             try:
-                await method(**kwargs)
-                return
+                return await method(**kwargs)
             except TelegramRetryAfter as exc:
                 attempt += 1
                 if attempt >= self._max_attempts:
