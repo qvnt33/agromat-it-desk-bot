@@ -14,12 +14,15 @@ from fastapi import FastAPI, HTTPException, Request
 from agromat_it_desk_bot.callback_handlers import verify_telegram_secret
 from agromat_it_desk_bot.config import BOT_TOKEN, TELEGRAM_CHAT_ID, YT_BASE_URL, YT_WEBHOOK_SECRET
 from agromat_it_desk_bot.messages import Msg, render
-from agromat_it_desk_bot.telegram import telegram_aiogram, telegram_commands
 from agromat_it_desk_bot.telegram import context as telegram_context
+from agromat_it_desk_bot.telegram import telegram_aiogram, telegram_commands
 from agromat_it_desk_bot.telegram.telegram_sender import AiogramTelegramSender
 from agromat_it_desk_bot.utils import (
     configure_logging,
+    extract_issue_assignee,
+    extract_issue_author,
     extract_issue_id,
+    extract_issue_status,
     format_telegram_message,
     get_str,
 )
@@ -118,6 +121,10 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:
 
     issue_id_unknown_msg: str = render(Msg.YT_ISSUE_NO_ID)  # Текст маркера невідомого ID задачі
 
+    status_text: str | None = extract_issue_status(issue)
+    assignee_text: str | None = extract_issue_assignee(issue)
+    author_text: str | None = extract_issue_author(issue)
+
     if isinstance(url_field, str) and url_field:
         # Використання посилання з вебхука
         url_val = url_field
@@ -132,7 +139,10 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:
     telegram_msg: str = format_telegram_message(issue_id,
                                                 summary,
                                                 description,
-                                                url_val)
+                                                url_val,
+                                                assignee=assignee_text,
+                                                status=status_text,
+                                                author=author_text)
     logger.debug('YouTrack webhook: message_length=%s', len(telegram_msg))
 
     # Inline-клавіатура з кнопкою прийняття

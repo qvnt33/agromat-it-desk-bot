@@ -60,6 +60,7 @@ UK: Mapping[Msg, str] = {
     Msg.ERR_YT_ISSUE_NO_URL: 'Невідомо URL заявки.',
     Msg.ERR_YT_DESCRIPTION_EMPTY: 'Заявка не має опису.',
     Msg.ERR_CALLBACK_RIGHTS: 'Недостатньо прав',
+    Msg.ERR_CALLBACK_AUTH_REQUIRED: 'Спершу авторизуйся через /connect та персональний токен YouTrack.',
     Msg.ERR_CALLBACK_UNKNOWN: 'Невідома дія',
     Msg.ERR_CALLBACK_ASSIGN_FAILED: 'Не вдалося призначити',
     Msg.ERR_CALLBACK_ASSIGN_ERROR: 'Помилка: не вдалось прийняти',

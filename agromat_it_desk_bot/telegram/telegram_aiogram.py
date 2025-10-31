@@ -14,8 +14,8 @@ from agromat_it_desk_bot.telegram.telegram_commands import (
     CALLBACK_CONFIRM_NO,
     CALLBACK_CONFIRM_YES,
     CALLBACK_RECONNECT_START,
-    CALLBACK_UNLINK_YES,
     CALLBACK_UNLINK_NO,
+    CALLBACK_UNLINK_YES,
     handle_confirm_reconnect,
     handle_connect_command,
     handle_link_command,
@@ -224,11 +224,6 @@ async def _on_accept_issue_callback(query: CallbackQuery) -> None:
     payload_text: str = query.data or ''  # Рядок дії callback
 
     logger.debug('Отримано callback: callback_id=%s payload=%s', callback_id, payload_text)
-
-    if not await callback_handlers.is_user_allowed(tg_user_id):
-        logger.info('Callback відхилено: tg_user_id=%s не має прав', tg_user_id)
-        await callback_handlers.reply_insufficient_rights(callback_id)
-        return
 
     action, issue_id = callback_handlers.parse_action(payload_text)
     if action != 'accept' or not issue_id:
