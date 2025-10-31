@@ -164,6 +164,27 @@ def upsert_user(record: UserRecord) -> None:
             (tg_user_id,),
         )
         existing: sqlite3.Row | None = cursor.fetchone()
+        cursor.execute(
+            """
+            SELECT
+                id,
+                tg_user_id,
+                yt_user_id,
+                yt_login,
+                yt_email,
+                token_hash,
+                token_created_at,
+                is_active,
+                last_seen_at,
+                registered_at,
+                created_at,
+                updated_at
+            FROM users
+            WHERE yt_user_id = ?
+            """,
+            (record['yt_user_id'],),
+        )
+        existing_by_yt: sqlite3.Row | None = cursor.fetchone()
         payload: dict[str, object] = {
             'tg_user_id': tg_user_id,
             'yt_user_id': record['yt_user_id'],
@@ -176,6 +197,31 @@ def upsert_user(record: UserRecord) -> None:
             'registered_at': record.get('registered_at'),
             'updated_at': now,
         }
+
+        if existing is None and existing_by_yt is not None and int(existing_by_yt['tg_user_id']) != tg_user_id:
+            if payload['registered_at'] is None:
+                fallback_registered = existing_by_yt['registered_at'] or existing_by_yt['created_at']
+                payload['registered_at'] = str(fallback_registered or now)
+            cursor.execute(
+                """
+                UPDATE users
+                SET
+                    tg_user_id = :tg_user_id,
+                    yt_user_id = :yt_user_id,
+                    yt_login = :yt_login,
+                    yt_email = :yt_email,
+                    token_hash = :token_hash,
+                    token_created_at = :token_created_at,
+                    is_active = :is_active,
+                    last_seen_at = :last_seen_at,
+                    registered_at = :registered_at,
+                    updated_at = :updated_at
+                WHERE yt_user_id = :yt_user_id
+                """,
+                payload,
+            )
+            connection.commit()
+            return
 
         if existing is None:
             registered_at: str = str(payload['registered_at'] or record.get('created_at') or now)
@@ -287,6 +333,7 @@ def fetch_user_by_yt_id(yt_user_id: str) -> UserRecord | None:
                 updated_at
             FROM users
             WHERE yt_user_id = ?
+              AND is_active = 1
             """,
             (yt_user_id,),
         )

@@ -184,6 +184,38 @@ def find_user_id(login: str | None, email: str | None) -> str | None:
     return user_id if isinstance(user_id, str) else None
 
 
+def fetch_issue_overview(issue_internal_id: str) -> Mapping[str, object] | None:
+    """Повертає основні поля задачі разом із кастомними полями.
+
+    :param issue_internal_id: Внутрішній ID задачі YouTrack.
+    :returns: Словник із полями ``summary``, ``description`` та ``customFields``.
+    """
+    headers: dict[str, str] = _base_headers()
+    response: requests.Response = requests.get(
+        f'{YT_BASE_URL}/api/issues/{issue_internal_id}',
+        params={
+            'fields': (
+                'summary,description,'
+                'reporter(fullName,name,login,email),'
+                'createdBy(fullName,name,login,email),'
+                'assignee(fullName,name,login,email),'
+                'customFields('
+                'name,value('
+                'name,fullName,login,email,localizedName,presentation,text'
+                ')'
+                ')'
+            ),
+        },
+        headers=headers,
+        timeout=10,
+    )
+    logger.debug('YouTrack fetch_issue_overview: issue=%s status=%s', issue_internal_id, response.status_code)
+    if not response.ok:
+        logger.debug('Не вдалося отримати дані задачі %s: %s', issue_internal_id, response.text)
+        return None
+    return cast(dict[str, object], response.json() or {})
+
+
 def _search_users(query: str) -> list[dict[str, object]] | None:
     """Виконує пошук користувачів у YouTrack за довільним запитом."""
     headers: dict[str, str] = _base_headers()  # Заголовки запиту до YouTrack

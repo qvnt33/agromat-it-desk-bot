@@ -62,6 +62,7 @@ class Msg(str, Enum):
     ERR_YT_ISSUE_NO_URL = 'err.yt_issue_no_url'
     ERR_YT_DESCRIPTION_EMPTY = 'err.yt_description_empty'
     ERR_CALLBACK_RIGHTS = 'err.callback_rights'
+    ERR_CALLBACK_AUTH_REQUIRED = 'err.callback_auth_required'
     ERR_CALLBACK_UNKNOWN = 'err.callback_unknown'
     ERR_CALLBACK_ASSIGN_FAILED = 'err.callback_assign_failed'
     ERR_CALLBACK_ASSIGN_ERROR = 'err.callback_assign_error'

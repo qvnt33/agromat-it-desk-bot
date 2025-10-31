@@ -51,3 +51,14 @@ YOUTRACK_ASSIGNEE_FIELD_NAME: str = os.getenv('YOUTRACK_ASSIGNEE_FIELD_NAME', 'A
 # Поле статусу та значення для режиму «В роботі»
 YOUTRACK_STATE_FIELD_NAME: str | None = os.getenv('YOUTRACK_STATE_FIELD_NAME')
 YOUTRACK_STATE_IN_PROGRESS: str | None = os.getenv('YOUTRACK_STATE_IN_PROGRESS')
+
+# Шаблони текстів
+TELEGRAM_MAIN_MESSAGE_TEMPLATE = (
+    '{header}\n'
+    '\n'
+    '<b>Автор:</b> <code>{author}</code>\n'
+    '<b>Статус:</b> <code>{status}</code>\n'
+    '<b>Виконавець:</b> <code>{assignee}</code>\n'
+    '\n'
+    '{description}'
+)
