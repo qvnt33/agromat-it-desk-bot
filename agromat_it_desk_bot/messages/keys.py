@@ -27,6 +27,7 @@ class Msg(str, Enum):
     CALLBACK_ACCEPTED = 'callback.accepted'
     TG_BTN_ACCEPT_ISSUE = 'tg.btn_accept_issue'
     YT_ISSUE_NO_ID = 'utils.issue_no_id'
+    YT_EMAIL_SUBJECT_MISSING = 'utils.email_subject_missing'
     CONNECT_START_NEW = 'connect.start_new'
     CONNECT_START_REGISTERED = 'connect.start_registered'
     CONNECT_HELP = 'connect.help'

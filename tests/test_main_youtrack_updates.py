@@ -27,7 +27,7 @@ def _issue_payload(status: str, assignee: str) -> dict[str, object]:
     return {
         'idReadable': 'SUP-1',
         'summary': 'Заявка тестова',
-        'description': 'Опис заявки',
+        'description': '<div dir="ltr">Опис заявки<div><br></div></div>',
         'author': 'Reporter',
         'status': status,
         'assignee': assignee,

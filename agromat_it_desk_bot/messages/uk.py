@@ -13,6 +13,7 @@ UK: Mapping[Msg, str] = {
     Msg.CALLBACK_ACCEPTED: 'Прийнято ✅',
     Msg.TG_BTN_ACCEPT_ISSUE: 'Прийняти',
     Msg.YT_ISSUE_NO_ID: '(без ID)',
+    Msg.YT_EMAIL_SUBJECT_MISSING: 'Тема заявки не вказана',
     Msg.CONNECT_START_NEW: (
         '👋 Привіт! Щоб користуватись ботом, підключи свій персональний <b>токен YouTrack</b>.\n\n'
         'Використай команду /connect <code>&lt;токен&gt;</code>.'

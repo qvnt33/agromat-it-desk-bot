@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
+from copy import deepcopy
 from typing import Any
 
 import uvicorn
@@ -27,10 +29,93 @@ from agromat_it_desk_bot.utils import (
     extract_issue_status,
     format_telegram_message,
     get_str,
+    normalize_issue_summary,
+    strip_html,
 )
 
 configure_logging()
 logger: logging.Logger = logging.getLogger(__name__)
+
+
+_EMAIL_HTML_MARKERS: tuple[str, ...] = (
+    'gmail',
+    'cid:',
+    'scrollbar-width',
+    'object-fit',
+    'border-image',
+)
+_ATTR_STYLE_DOUBLE_RE = re.compile(r'\sstyle="[^"]*"', re.IGNORECASE)
+_ATTR_STYLE_SINGLE_RE = re.compile(r"\sstyle='[^']*'", re.IGNORECASE)
+_ATTR_CLASS_RE = re.compile(r"\sclass=([\"']).*?\1", re.IGNORECASE)
+_ATTR_DIR_RE = re.compile(r"\sdir=([\"']).*?\1", re.IGNORECASE)
+_ATTR_MISC_PREFIX_RE = re.compile(
+    r"\s(?:data|aria|background|color|lang|width|height|align|valign|border|cellpadding|cellspacing)[^=]*=([\"']).*?\1",
+    re.IGNORECASE,
+)
+_SPAN_TAG_RE = re.compile(r'</?span\b[^>]*>', re.IGNORECASE)
+_FONT_TAG_RE = re.compile(r'</?font\b[^>]*>', re.IGNORECASE)
+_WHITESPACE_TAGS_RE = re.compile(r'>\s+<')
+_MULTISPACE_RE = re.compile(r'[ \t]{2,}')
+_IMG_TAG_RE = re.compile(r'<img\b[^>]*?>', re.IGNORECASE)
+_EMPTY_PARAGRAPH_RE = re.compile(r'<p>\s*</p>', re.IGNORECASE)
+
+
+def _looks_like_email_description(description: str) -> bool:
+    """Визначає, чи HTML-опис схожий на згенерований поштовим клієнтом."""
+    normalized: str = description.casefold()
+    if 'gmail' in normalized or 'cid:' in normalized:
+        return True
+    score: int = sum(1 for marker in _EMAIL_HTML_MARKERS if marker in normalized)
+    return score >= 2
+
+
+def _normalize_email_description(description: str) -> str:
+    """Очищає HTML-опис, видаляючи службові атрибути та зайві теги."""
+    cleaned: str = description.replace('\xa0', ' ')
+    cleaned = _ATTR_STYLE_DOUBLE_RE.sub('', cleaned)
+    cleaned = _ATTR_STYLE_SINGLE_RE.sub('', cleaned)
+    cleaned = _ATTR_CLASS_RE.sub('', cleaned)
+    cleaned = _ATTR_DIR_RE.sub('', cleaned)
+    cleaned = _ATTR_MISC_PREFIX_RE.sub('', cleaned)
+    cleaned = _SPAN_TAG_RE.sub('', cleaned)
+    cleaned = _FONT_TAG_RE.sub('', cleaned)
+    cleaned = _IMG_TAG_RE.sub('', cleaned)
+    cleaned = _MULTISPACE_RE.sub(' ', cleaned)
+    cleaned = _WHITESPACE_TAGS_RE.sub('>\n<', cleaned)
+    cleaned = _EMPTY_PARAGRAPH_RE.sub('', cleaned)
+    return cleaned.strip()
+
+
+def _prepare_payload_for_logging(payload: Mapping[str, object]) -> dict[str, object]:
+    """Повертає копію payload із очищеним description для поштових заявок."""
+    payload_copy: dict[str, object] = deepcopy(dict(payload))
+
+    def _sanitize_description(container: object) -> None:
+        if not isinstance(container, dict):
+            return
+        description_obj: object | None = container.get('description')
+        if not isinstance(description_obj, str):
+            return
+        if not _looks_like_email_description(description_obj):
+            return
+        container['description'] = _normalize_email_description(description_obj)
+
+    def _normalize_summary(container: object) -> None:
+        if not isinstance(container, dict):
+            return
+        summary_obj: object | None = container.get('summary')
+        if summary_obj is None:
+            return
+        container['summary'] = normalize_issue_summary(str(summary_obj))
+
+    _sanitize_description(payload_copy)
+    _normalize_summary(payload_copy)
+    issue_obj: object | None = payload_copy.get('issue')
+    if isinstance(issue_obj, dict):
+        _sanitize_description(issue_obj)
+        _normalize_summary(issue_obj)
+
+    return payload_copy
 
 
 _TELEGRAM_CHAT_ID_RESOLVED: int | str
@@ -46,8 +131,8 @@ def _prepare_issue_payload(  # noqa: C901
     issue: Mapping[str, object],
 ) -> tuple[str, str, str, str, str | None, str | None, str | None]:
     issue_id: str = extract_issue_id(issue)
-    summary: str = get_str(issue, 'summary')
-    description: str = get_str(issue, 'description')
+    summary: str = normalize_issue_summary(get_str(issue, 'summary'))
+    description: str = strip_html(get_str(issue, 'description'))
 
     author_raw: str = get_str(issue, 'author')
     if not author_raw:
@@ -171,15 +256,13 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:  # noqa: C901
             logger.warning('Невірний секрет YouTrack вебхука')
             raise HTTPException(status_code=403, detail='Доступ заборонено')
 
-    logger.info('Отримано вебхук YouTrack: %s', payload)
-
     issue_candidate: object | None = payload.get('issue')
     issue: Mapping[str, object] = issue_candidate if isinstance(issue_candidate, dict) else payload
 
     issue_id, summary, description, url_val, assignee_text, status_text, author_text = _prepare_issue_payload(issue)
 
-    logger.debug('YouTrack webhook: issue_id=%s summary=%s', issue_id, summary)
-    logger.debug('YouTrack webhook: resolved_url=%s', url_val)
+    payload_for_logging = _prepare_payload_for_logging(payload)
+    logger.info('Отримано вебхук YouTrack: %s', payload_for_logging)
 
     telegram_msg: str = format_telegram_message(
         issue_id,

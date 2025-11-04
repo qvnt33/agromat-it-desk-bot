@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import logging.config
+import re
 from collections.abc import Iterable, Mapping
-from html import escape
+from html import escape, unescape
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -18,6 +20,43 @@ logger: logging.Logger = logging.getLogger(__name__)
 _DEFAULT_AUTHOR: str = '[невідомо]'
 _DEFAULT_STATUS: str = '[невідомо]'
 _DEFAULT_ASSIGNEE: str = '[не призначено]'
+_EMAIL_SUMMARY_FALLBACK_PREFIX: str = 'проблема з електронним листом'
+
+
+class _HTMLStripper(HTMLParser):
+    """Перетворює HTML на текст, зберігаючи прості розриви рядків."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._parts: list[str] = []
+
+    def handle_starttag(self, tag: str, _: list[tuple[str, str | None]]) -> None:  # noqa: D401
+        if tag in {'br', 'p', 'div', 'li'}:
+            self._parts.append('\n')
+
+    def handle_startendtag(self, tag: str, _: list[tuple[str, str | None]]) -> None:
+        if tag in {'br', 'hr'}:
+            self._parts.append('\n')
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {'p', 'div', 'li'}:
+            self._parts.append('\n')
+
+    def handle_data(self, data: str) -> None:
+        self._parts.append(data)
+
+    def get_data(self) -> str:
+        raw: str = ''.join(self._parts)
+        normalized = re.sub(r'\n\s*\n+', '\n', raw)
+        return normalized.strip()
+
+
+def strip_html(value: str) -> str:
+    """Видаляє HTML-теги та розкодовує сутності."""
+    stripper = _HTMLStripper()
+    stripper.feed(value)
+    text = stripper.get_data()
+    return unescape(text)
 
 
 def _stringify_issue_value(value: object | None) -> str | None:
@@ -41,6 +80,16 @@ def _stringify_issue_value(value: object | None) -> str | None:
                 if stripped_candidate:
                     return stripped_candidate
     return None
+
+
+def normalize_issue_summary(summary_raw: str | None) -> str:
+    """Повертає валідний заголовок задачі з урахуванням поштових заглушок."""
+    summary_text: str = (summary_raw or '').strip()
+    if not summary_text:
+        return render(Msg.YT_EMAIL_SUBJECT_MISSING)
+    if summary_text.casefold().startswith(_EMAIL_SUMMARY_FALLBACK_PREFIX):
+        return render(Msg.YT_EMAIL_SUBJECT_MISSING)
+    return summary_text
 
 
 def _extract_from_custom_fields(custom_fields: object, names: Iterable[str]) -> str | None:
@@ -188,10 +237,12 @@ def format_telegram_message(
     summary_formatted: str = escape(summary_value) if summary_value else ''
 
     description_source: str = description_raw.strip()
+    if '<' in description_source:
+        description_source = strip_html(description_source)
     if not description_source:
         description_text: str = render(Msg.ERR_YT_DESCRIPTION_EMPTY)
     else:
-        description_candidate: str = escape(description_raw)
+        description_candidate: str = escape(description_source)
         if len(description_candidate) > DESCRIPTION_MAX_LEN:
             description_candidate = f'{description_candidate[:DESCRIPTION_MAX_LEN]}…'
         description_text = description_candidate
