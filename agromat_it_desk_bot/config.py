@@ -25,9 +25,6 @@ TELEGRAM_WEBHOOK_SECRET: str | None = os.getenv('TELEGRAM_WEBHOOK_SECRET')
 # Налаштовують секрет для перевірки YouTrack вебхука
 YT_WEBHOOK_SECRET: str | None = os.getenv('YT_WEBHOOK_SECRET')
 
-# Перелічують дозволені Telegram user IDs (через кому)
-ALLOWED_TG_USER_IDS_RAW: str = os.getenv('ALLOWED_TG_USER_IDS', '').strip()
-ALLOWED_TG_USER_IDS: set[int] = {int(x) for x in ALLOWED_TG_USER_IDS_RAW.split(',') if x.strip().isdigit()}
 
 # Задають параметри доступу до YouTrack API
 YT_TOKEN: str | None = os.getenv('YT_TOKEN')
