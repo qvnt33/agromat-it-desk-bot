@@ -70,6 +70,14 @@
 uvicorn agromat_it_desk_bot.main:app --host 0.0.0.0 --port 8080 --reload
 ```
 
+### Запуск в Docker
+- Збірка образу
+    - `docker build -t agromat-it-desk-bot .`
+- Запуск контейнера з .env і портом 8080
+    - `docker run -d --name agromat-bot --env-file .env -p 8080:8080 agromat-it-desk-bot`
+- Логи
+    - `docker logs -f agromat-bot`
+
 ## Поведінка бота
 
 ### Реєстрація та авторизація
