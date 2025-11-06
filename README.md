@@ -2,7 +2,10 @@
 
 ![agromat-it-desk-bot](docs/images/agromat_icon_empty.svg)
 
-> Автоматично пересилає створення заявок із YouTrack у Telegram-чат, дозволяє приймати їх через inline-кнопку та тримає звʼязок із YouTrack у синхроні.
+**Agromat IT Desk Bot** – це сервіс на FastAPI з інтеграцією Aiogram v3, який отримує вебхуки від YouTrack, перетворює їх на лаконічні повідомлення й автоматично публікує у Telegram.
+Інженер підтримки може прийняти заявку в телеграм — бот одразу оновлює виконавця та статус у YouTrack, підтримуючи повну синхронізацію між системами.
+
+> Розроблено для компанії [Агромат](https://www.agromat.ua).
 
 ## Огляд
 
@@ -74,10 +77,10 @@ uvicorn agromat_it_desk_bot.main:app --host 0.0.0.0 --port 8080 --reload
 - Користувач надсилає команду боту в особистий чат `/start`.
 - Якщо користувач не привʼязаний, бот показує інструкцію та кнопку з документацією YouTrack щодо токенів.
 - Команда `/connect <youtrack_token>`:
-    1. Перевіряє токен через `GET /api/users/me` (функція `validate_token`).
-    2. Нормалізує логін/email/id (`normalize_user`).
-    3. Перевіряє членство у проєкті (`is_member_of_project`), використовуючи `YT_PROJECT_KEY`/`YT_PROJECT_ID`.
-    4. Зберігає користувача у SQLite (`users` таблиця) та позначає `is_active=1`.
+    - Перевіряє токен через `GET /api/users/me` (функція `validate_token`).
+    - Нормалізує логін/email/id (`normalize_user`).
+    - Перевіряє членство у проєкті (`is_member_of_project`), використовуючи `YT_PROJECT_KEY`/`YT_PROJECT_ID`.
+    - Зберігає користувача у SQLite (`users` таблиця) та позначає `is_active=1`.
 
 - `/connect` із вже зареєстрованим користувачем запускає підтвердження оновлення токена (**inline "Так/Ні"**).
 - `/unlink` – видаляє токен і деактивує користувача (`is_active=0`).
