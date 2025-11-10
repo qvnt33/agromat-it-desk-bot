@@ -7,5 +7,4 @@ services:
       - "8080:8080"
     volumes:
       - ./data:/app/data
-      - ./user_map.json:/app/user_map.json
     restart: unless-stopped
