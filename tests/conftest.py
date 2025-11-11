@@ -37,6 +37,7 @@ class FakeTelegramSender(TelegramSender):
         self.edited_markup: list[dict[str, object]] = []
         self.edited_text: list[dict[str, object]] = []
         self._message_counter: int = 1_000
+        self.raise_on_edit: list[BaseException] = []
 
     async def send_message(
         self,
@@ -89,6 +90,9 @@ class FakeTelegramSender(TelegramSender):
         reply_markup: dict[str, object] | None = None,
         disable_web_page_preview: bool = True,
     ) -> None:
+        if self.raise_on_edit:
+            error: BaseException = self.raise_on_edit.pop(0)
+            raise error
         payload: dict[str, object] = {
             'chat_id': chat_id,
             'message_id': message_id,

@@ -8,7 +8,7 @@ from html import escape
 from typing import Any, Protocol, runtime_checkable
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramRetryAfter
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -166,6 +166,16 @@ class AiogramTelegramSender:
                 delay: float = max(exc.retry_after, 1.0)
                 logger.info('Отримано 429, чекаємо %s с перед повтором', delay)
                 await asyncio.sleep(delay)
-            except TelegramAPIError:
-                logger.exception('Помилка Telegram API для методу %s', getattr(method, '__name__', method))
+            except TelegramBadRequest as exc:
+                message: str = str(exc)
+                if 'message is not modified' in message.lower():
+                    raise
+                logger.exception('BadRequest Telegram API для методу %s: %s',
+                                 getattr(method, '__name__', method),
+                                 message)
+                raise
+            except TelegramAPIError as exc:
+                logger.exception('Помилка Telegram API для методу %s: %s',
+                                 getattr(method, '__name__', method),
+                                 exc)
                 raise
