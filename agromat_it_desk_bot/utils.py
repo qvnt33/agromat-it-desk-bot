@@ -12,7 +12,12 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, TypedDict
 
-from agromat_it_desk_bot.config import DESCRIPTION_MAX_LEN, TELEGRAM_MAIN_MESSAGE_TEMPLATE, USER_MAP_FILE
+from agromat_it_desk_bot.config import (
+    DESCRIPTION_MAX_LEN,
+    LOG_LEVEL,
+    TELEGRAM_MAIN_MESSAGE_TEMPLATE,
+    USER_MAP_FILE,
+)
 from agromat_it_desk_bot.messages import Msg, render
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -155,6 +160,41 @@ class UserMapEntry(TypedDict, total=False):
 UserMap = dict[str, UserMapEntry | str]
 
 
+def _resolve_log_level(target_level: str | None) -> str | None:
+    """Повертає валідне ім'я рівня логування (DEBUG/INFO/...)."""
+    if not target_level:
+        return None
+    normalized: str = target_level.strip()
+    if not normalized:
+        return None
+    if normalized.isdigit():
+        numerical = int(normalized)
+        resolved = logging.getLevelName(numerical)
+        return resolved if isinstance(resolved, str) else None
+    upper_level: str = normalized.upper()
+    lookup = logging.getLevelName(upper_level)
+    return upper_level if isinstance(lookup, int) else None
+
+
+def _apply_log_level_override(config_data: dict[str, Any], level_name: str) -> None:
+    """Оновлює рівні root/стандартних хендлерів під час конфігурації."""
+    handlers_obj: object = config_data.get('handlers')
+    if isinstance(handlers_obj, dict):
+        for handler_cfg in handlers_obj.values():
+            if isinstance(handler_cfg, dict):
+                handler_cfg['level'] = level_name
+
+    loggers_obj: object = config_data.get('loggers')
+    if isinstance(loggers_obj, dict):
+        root_logger: object | None = loggers_obj.get('root')
+        if isinstance(root_logger, dict):
+            root_logger['level'] = level_name
+
+    root_config: object | None = config_data.get('root')
+    if isinstance(root_config, dict):
+        root_config['level'] = level_name
+
+
 def configure_logging(config_path: Path | None = None) -> None:
     """Завантажує конфіг логування з ``logging.conf`` або застосовує дефолт."""
     # Шлях до файлу конфігурації логування
@@ -172,6 +212,9 @@ def configure_logging(config_path: Path | None = None) -> None:
         message_invalid: str = 'Не вдалося прочитати logging.conf (%s): %s, використовую базову конфігурацію'
         logging.getLogger(__name__).warning(message_invalid, target_path, exc)
     else:
+        log_level_override: str | None = _resolve_log_level(LOG_LEVEL)
+        if log_level_override:
+            _apply_log_level_override(config_data, log_level_override)
         logging.config.dictConfig(config_data)
 
 

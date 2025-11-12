@@ -49,6 +49,9 @@ YOUTRACK_ASSIGNEE_FIELD_NAME: str = os.getenv('YOUTRACK_ASSIGNEE_FIELD_NAME', 'A
 YOUTRACK_STATE_FIELD_NAME: str | None = os.getenv('YOUTRACK_STATE_FIELD_NAME')
 YOUTRACK_STATE_IN_PROGRESS: str | None = os.getenv('YOUTRACK_STATE_IN_PROGRESS')
 
+# Рівень логування для root/основних хендлерів
+LOG_LEVEL: str = os.getenv('LOG_LEVEL', 'INFO').strip() or 'INFO'
+
 # Шаблони текстів
 TELEGRAM_MAIN_MESSAGE_TEMPLATE = (
     '{header}\n'
