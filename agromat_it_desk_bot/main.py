@@ -8,6 +8,7 @@ import re
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import uvicorn
@@ -60,6 +61,7 @@ _WHITESPACE_TAGS_RE = re.compile(r'>\s+<')
 _MULTISPACE_RE = re.compile(r'[ \t]{2,}')
 _IMG_TAG_RE = re.compile(r'<img\b[^>]*?>', re.IGNORECASE)
 _EMPTY_PARAGRAPH_RE = re.compile(r'<p>\s*</p>', re.IGNORECASE)
+_TELEGRAM_EDIT_TTL: timedelta = timedelta(hours=48)
 
 
 def _looks_like_email_description(description: str) -> bool:
@@ -118,6 +120,28 @@ def _prepare_payload_for_logging(payload: Mapping[str, object]) -> dict[str, obj
         _normalize_summary(issue_obj)
 
     return payload_copy
+
+
+def _parse_iso_datetime(value: str | None) -> datetime | None:
+    """Перетворює ISO-рядок на ``datetime`` із часовою зоною."""
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _is_edit_window_expired(updated_at: str | None) -> bool:
+    """Визначає, чи минув ліміт редагування повідомлення Telegram."""
+    baseline: datetime | None = _parse_iso_datetime(updated_at)
+    if baseline is None:
+        return False
+    now: datetime = datetime.now(tz=timezone.utc)
+    return now - baseline > _TELEGRAM_EDIT_TTL
 
 
 _TELEGRAM_CHAT_ID_RESOLVED: int | str
@@ -382,6 +406,12 @@ async def youtrack_update(request: Request) -> dict[str, bool]:  # noqa: C901
     if record is None:
         logger.info('Повідомлення для задачі %s не знайдено, пропускаю update', issue_id)
         return {'ok': False}
+
+    updated_at_raw: object | None = record.get('updated_at')
+    updated_at_text: str | None = updated_at_raw if isinstance(updated_at_raw, str) else None
+    if _is_edit_window_expired(updated_at_text):
+        logger.info('Повідомлення задачі %s не оновлено: перевищено ліміт 48 годин', issue_id)
+        return {'ok': True}
 
     chat_id_raw: str = str(record['chat_id'])
     chat_id: int | str
