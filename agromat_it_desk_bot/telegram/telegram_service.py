@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import importlib
 import logging
 from typing import Any
 
-import requests  # type: ignore[import-untyped]
 from fastapi import HTTPException
 
 from agromat_it_desk_bot.config import BOT_TOKEN, TELEGRAM_CHAT_ID
+
+requests: Any = importlib.import_module('requests')
 
 logger: logging.Logger = logging.getLogger(__name__)
 

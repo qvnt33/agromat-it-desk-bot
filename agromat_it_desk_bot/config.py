@@ -52,6 +52,9 @@ YOUTRACK_STATE_IN_PROGRESS: str | None = os.getenv('YOUTRACK_STATE_IN_PROGRESS')
 # Рівень логування для root/основних хендлерів
 LOG_LEVEL: str = os.getenv('LOG_LEVEL', 'INFO').strip() or 'INFO'
 
+# Секрет для шифрування персональних токенів користувачів
+USER_TOKEN_SECRET: str | None = os.getenv('USER_TOKEN_SECRET')
+
 # Шаблони текстів
 TELEGRAM_MAIN_MESSAGE_TEMPLATE = (
     '{header}\n'

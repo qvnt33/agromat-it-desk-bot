@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import importlib
 from collections.abc import Iterator
 from typing import Any
 
 import pytest
-import requests  # type: ignore[import-untyped]
 
 import agromat_it_desk_bot.youtrack.youtrack_auth_service as auth_service
+
+requests: Any = importlib.import_module('requests')
 
 
 class FakeResponse:

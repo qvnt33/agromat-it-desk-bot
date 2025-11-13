@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 import agromat_it_desk_bot.auth.service as auth_service
+import agromat_it_desk_bot.config as config
 from agromat_it_desk_bot.auth.service import RegistrationOutcome
 
 
@@ -131,3 +132,32 @@ def test_is_authorized_false_after_deactivation(monkeypatch: pytest.MonkeyPatch)
     assert auth_service.is_authorized(789) is False
     login, email, yt_user_id = auth_service.get_authorized_yt_user(789)
     assert login is None and email is None and yt_user_id is None
+
+
+def test_get_user_token_returns_decrypted_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Після реєстрації токен можна отримати для викликів."""
+    patch_auth_flow(
+        monkeypatch,
+        token_payload=(True, {'id': 'YT-88'}),
+        normalized=('agent', None, 'YT-88'),
+        member=True,
+    )
+
+    auth_service.register_user(901, 'secret-token')
+    stored: str | None = auth_service.get_user_token(901)
+
+    assert stored == 'secret-token'
+
+
+def test_register_user_requires_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Без USER_TOKEN_SECRET реєстрація завершується помилкою."""
+    patch_auth_flow(
+        monkeypatch,
+        token_payload=(True, {'id': 'YT-90'}),
+        normalized=('agent', None, 'YT-90'),
+        member=True,
+    )
+    monkeypatch.setattr(config, 'USER_TOKEN_SECRET', None, raising=False)
+
+    with pytest.raises(auth_service.RegistrationError):
+        auth_service.register_user(902, 'token')

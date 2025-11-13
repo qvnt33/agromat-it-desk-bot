@@ -30,6 +30,7 @@ class UserRecord(TypedDict, total=False):
     yt_email: str | None
     token_hash: str | None
     token_created_at: str | None
+    token_encrypted: str | None
     is_active: bool
     last_seen_at: str | None
     registered_at: str | None
@@ -54,6 +55,7 @@ def migrate() -> None:
                 yt_email TEXT,
                 token_hash TEXT,
                 token_created_at TEXT,
+                token_encrypted TEXT,
                 is_active INTEGER NOT NULL DEFAULT 0,
                 last_seen_at TEXT,
                 registered_at TEXT NOT NULL,
@@ -88,6 +90,8 @@ def _ensure_columns(connection: sqlite3.Connection) -> None:
         cursor.execute('ALTER TABLE users ADD COLUMN registered_at TEXT')
     if 'updated_at' not in columns:
         cursor.execute('ALTER TABLE users ADD COLUMN updated_at TEXT')
+    if 'token_encrypted' not in columns:
+        cursor.execute('ALTER TABLE users ADD COLUMN token_encrypted TEXT')
     connection.commit()
 
 
@@ -184,6 +188,7 @@ def upsert_user(record: UserRecord) -> None:
                 yt_email,
                 token_hash,
                 token_created_at,
+                token_encrypted,
                 is_active,
                 last_seen_at,
                 registered_at,
@@ -202,6 +207,7 @@ def upsert_user(record: UserRecord) -> None:
             'yt_email': record.get('yt_email'),
             'token_hash': record.get('token_hash'),
             'token_created_at': record.get('token_created_at'),
+            'token_encrypted': record.get('token_encrypted'),
             'is_active': 1 if record.get('is_active', True) else 0,
             'last_seen_at': record.get('last_seen_at'),
             'registered_at': record.get('registered_at'),
@@ -222,6 +228,7 @@ def upsert_user(record: UserRecord) -> None:
                     yt_email = :yt_email,
                     token_hash = :token_hash,
                     token_created_at = :token_created_at,
+                    token_encrypted = :token_encrypted,
                     is_active = :is_active,
                     last_seen_at = :last_seen_at,
                     registered_at = :registered_at,
@@ -246,6 +253,7 @@ def upsert_user(record: UserRecord) -> None:
                     yt_email,
                     token_hash,
                     token_created_at,
+                    token_encrypted,
                     is_active,
                     last_seen_at,
                     registered_at,
@@ -258,6 +266,7 @@ def upsert_user(record: UserRecord) -> None:
                     :yt_email,
                     :token_hash,
                     :token_created_at,
+                    :token_encrypted,
                     :is_active,
                     :last_seen_at,
                     :registered_at,
@@ -284,6 +293,7 @@ def upsert_user(record: UserRecord) -> None:
                     yt_email = :yt_email,
                     token_hash = :token_hash,
                     token_created_at = :token_created_at,
+                    token_encrypted = :token_encrypted,
                     is_active = :is_active,
                     last_seen_at = :last_seen_at,
                     registered_at = :registered_at,
@@ -309,6 +319,7 @@ def fetch_user_by_tg_id(tg_user_id: int) -> UserRecord | None:
                 yt_email,
                 token_hash,
                 token_created_at,
+                token_encrypted,
                 is_active,
                 last_seen_at,
                 registered_at,
@@ -339,6 +350,7 @@ def fetch_user_by_yt_id(yt_user_id: str) -> UserRecord | None:
                 yt_email,
                 token_hash,
                 token_created_at,
+                token_encrypted,
                 is_active,
                 last_seen_at,
                 registered_at,
@@ -368,6 +380,7 @@ def deactivate_user(tg_user_id: int) -> None:
                 is_active = 0,
                 token_hash = NULL,
                 token_created_at = NULL,
+                token_encrypted = NULL,
                 updated_at = ?,
                 last_seen_at = ?
             WHERE tg_user_id = ?
@@ -474,6 +487,7 @@ def _row_to_record(row: sqlite3.Row) -> UserRecord:
         'yt_email': row['yt_email'],
         'token_hash': row['token_hash'],
         'token_created_at': row['token_created_at'],
+        'token_encrypted': row['token_encrypted'],
         'is_active': bool(row['is_active']),
         'last_seen_at': row['last_seen_at'],
         'registered_at': row['registered_at'],

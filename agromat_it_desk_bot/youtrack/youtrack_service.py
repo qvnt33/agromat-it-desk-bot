@@ -77,13 +77,20 @@ def fetch_issue_details(issue_id_readable: str) -> IssueDetails | None:
     return IssueDetails(summary, description, assignee, status, author)
 
 
-def assign_issue(issue_id_readable: str, login: str | None, email: str | None, user_id: str | None) -> bool:
+def assign_issue(
+    issue_id_readable: str,
+    login: str | None,
+    email: str | None,
+    user_id: str | None,
+    user_token: str | None,
+) -> bool:
     """Переводить задачу в стан «в роботі» після підтвердження користувачем.
 
     :param issue_id_readable: Короткий ID задачі (``ABC-123``).
     :param login: Логін користувача YouTrack (використовується для журналювання).
     :param email: Email користувача YouTrack.
     :param user_id: Внутрішній ID користувача (може бути ``None``).
+    :param user_token: Персональний токен користувача для REST-запиту.
     :returns: ``True`` якщо статус оновлено.
     """
     logger.debug('Отримано запит оновлення статусу: issue=%s login=%s email=%s yt_user_id=%s',
@@ -96,7 +103,7 @@ def assign_issue(issue_id_readable: str, login: str | None, email: str | None, u
         logger.warning('Не знайдено внутрішній ID задачі: %s', issue_id_readable)
         return False
 
-    status_updated: bool = _ensure_in_progress(issue_id, issue_id_readable)
+    status_updated: bool = _ensure_in_progress(issue_id, issue_id_readable, user_token)
     if status_updated:
         logger.info(
             'Статус задачі %s переведено у %s користувачем login=%s email=%s yt_user_id=%s',
@@ -138,8 +145,11 @@ def lookup_user_by_login(login: str) -> tuple[str | None, str | None, str | None
     return resolved_login, email, yt_user_id
 
 
-def _ensure_in_progress(issue_id: str, issue_id_readable: str) -> bool:
+def _ensure_in_progress(issue_id: str, issue_id_readable: str, auth_token: str | None) -> bool:
     """Встановлює статус задачі у значення «в роботі», якщо налаштовано."""
+    if not auth_token:
+        logger.warning('Відсутній персональний токен для оновлення задачі %s', issue_id_readable)
+        return False
     state_field_name: str | None = YOUTRACK_STATE_FIELD_NAME
     desired_state: str | None = YOUTRACK_STATE_IN_PROGRESS
     if not state_field_name or not desired_state:
@@ -171,7 +181,7 @@ def _ensure_in_progress(issue_id: str, issue_id_readable: str) -> bool:
         logger.warning('ID поля стану відсутній у задачі %s', issue_id_readable)
         return False
 
-    if assign_custom_field(issue_id, field_id_obj, payload):
+    if assign_custom_field(issue_id, field_id_obj, payload, auth_token=auth_token):
         logger.info('Статус задачі %s оновлено на %s', issue_id_readable, desired_state)
         return True
 

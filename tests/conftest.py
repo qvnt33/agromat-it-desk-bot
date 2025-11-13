@@ -24,6 +24,7 @@ def isolated_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterat
     monkeypatch.setattr(config, 'DATABASE_PATH', db_path, raising=False)
     monkeypatch.setattr(db, 'DATABASE_PATH', db_path, raising=False)
     monkeypatch.setattr(auth_service, '_migrated', False, raising=False)
+    monkeypatch.setattr(config, 'USER_TOKEN_SECRET', 'test-secret', raising=False)
     yield
 
 

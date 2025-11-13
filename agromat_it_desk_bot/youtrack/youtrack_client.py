@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import importlib
 import logging
 from collections.abc import Iterable, Mapping
-from typing import TypedDict, cast
-
-import requests  # type: ignore[import-untyped]
+from typing import Any, TypedDict, cast
 
 from agromat_it_desk_bot.config import YT_BASE_URL, YT_TOKEN
+
+requests: Any = importlib.import_module('requests')
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -118,15 +119,21 @@ def fetch_issue_custom_fields(issue_internal_id: str, field_names: Iterable[str]
     return result
 
 
-def assign_custom_field(issue_internal_id: str, field_id: str, payload: dict[str, object]) -> bool:
+def assign_custom_field(
+    issue_internal_id: str,
+    field_id: str,
+    payload: dict[str, object],
+    auth_token: str | None = None,
+) -> bool:
     """Оновлює значення custom field для задачі.
 
     :param issue_internal_id: Внутрішній ID задачі.
     :param field_id: Ідентифікатор кастомного поля.
     :param payload: Тіло запиту з новим значенням.
+    :param auth_token: Токен YouTrack, від імені якого виконується запит.
     :returns: ``True`` у разі успішного оновлення, інакше ``False``.
     """
-    headers: dict[str, str] = _base_headers()
+    headers: dict[str, str] = _base_headers(auth_token)
     response: requests.Response = requests.post(
         f'{YT_BASE_URL}/api/issues/{issue_internal_id}/customFields/{field_id}',
         params={'fields': 'id'},
@@ -280,7 +287,13 @@ def find_state_value_id(field_data: CustomField, desired_state: str) -> str | No
     return None
 
 
-def _base_headers() -> dict[str, str]:
+def _base_headers(token_override: str | None = None) -> dict[str, str]:
     """Повертає стандартні заголовки для викликів YouTrack API."""
-    assert YT_TOKEN
-    return {'Authorization': f'Bearer {YT_TOKEN}', 'Accept': 'application/json', 'Content-Type': 'application/json'}
+    token: str | None = token_override or YT_TOKEN
+    if not token:
+        raise RuntimeError('YT_TOKEN не налаштовано')
+    return {
+        'Authorization': f'Bearer {token}',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+    }

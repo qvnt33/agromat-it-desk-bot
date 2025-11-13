@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import importlib
 import logging
 import time
 from collections.abc import Iterable, Mapping
-
-import requests  # type: ignore[import-untyped]
+from typing import Any
 
 from agromat_it_desk_bot.config import (
     PROJECT_ID,
@@ -16,6 +16,8 @@ from agromat_it_desk_bot.config import (
     YT_VALIDATE_RETRIES,
     YT_VALIDATE_TIMEOUT,
 )
+
+requests: Any = importlib.import_module('requests')
 
 logger: logging.Logger = logging.getLogger(__name__)
 

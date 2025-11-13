@@ -122,6 +122,29 @@ def _prepare_payload_for_logging(payload: Mapping[str, object]) -> dict[str, obj
     return payload_copy
 
 
+def _build_log_entry(payload: Mapping[str, object]) -> dict[str, object]:
+    """Формує короткий запис для журналів без зайвого HTML."""
+    issue_obj: object | None = payload.get('issue')
+    issue: Mapping[str, object] = issue_obj if isinstance(issue_obj, Mapping) else payload
+    log_entry: dict[str, object] = {}
+    for key in ('idReadable', 'summary', 'status', 'assignee', 'author', 'url'):
+        value: object | None = issue.get(key)
+        if value is None:
+            continue
+        text_value: str | None
+        if key == 'summary':
+            text_value = normalize_issue_summary(str(value) if not isinstance(value, (int, float, bool)) else str(value))
+        else:
+            text_value = str(value).strip() if not isinstance(value, (int, float, bool)) else str(value)
+        log_entry[key] = text_value if text_value is not None else value
+    description_obj: object | None = issue.get('description')
+    if isinstance(description_obj, str):
+        description_text: str = strip_html(description_obj).strip()
+        if description_text:
+            log_entry['description'] = description_text
+    return log_entry
+
+
 def _parse_iso_datetime(value: str | None) -> datetime | None:
     """Перетворює ISO-рядок на ``datetime`` із часовою зоною."""
     if not value:
@@ -303,7 +326,7 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:  # noqa: C901
     issue_id, summary, description, url_val, assignee_text, status_text, author_text = _prepare_issue_payload(issue)
 
     payload_for_logging = _prepare_payload_for_logging(payload)
-    logger.info('Отримано вебхук YouTrack: %s', payload_for_logging)
+    logger.info('Отримано вебхук YouTrack: %s', _build_log_entry(payload_for_logging))
 
     telegram_msg: str = format_telegram_message(
         issue_id,
@@ -409,10 +432,6 @@ async def youtrack_update(request: Request) -> dict[str, bool]:  # noqa: C901
 
     updated_at_raw: object | None = record.get('updated_at')
     updated_at_text: str | None = updated_at_raw if isinstance(updated_at_raw, str) else None
-    if _is_edit_window_expired(updated_at_text):
-        logger.info('Повідомлення задачі %s не оновлено: перевищено ліміт 48 годин', issue_id)
-        return {'ok': True}
-
     chat_id_raw: str = str(record['chat_id'])
     chat_id: int | str
     try:
@@ -420,6 +439,15 @@ async def youtrack_update(request: Request) -> dict[str, bool]:  # noqa: C901
     except ValueError:
         chat_id = chat_id_raw
     message_id: int = int(record['message_id'])
+    sender = telegram_context.get_sender()
+    if _is_edit_window_expired(updated_at_text):
+        archived_status: str = render(Msg.STATUS_ARCHIVED)
+        logger.info(
+            'Повідомлення задачі %s не оновлено: перевищено ліміт 48 годин (статус: %s)',
+            issue_id,
+            archived_status,
+        )
+        return {'ok': True}
 
     telegram_msg: str = format_telegram_message(
         issue_id,
@@ -431,7 +459,6 @@ async def youtrack_update(request: Request) -> dict[str, bool]:  # noqa: C901
         author=author_text,
     )
 
-    sender = telegram_context.get_sender()
     try:
         await sender.edit_message_text(
             chat_id,

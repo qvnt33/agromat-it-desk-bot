@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sqlite3
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import cast
 
@@ -10,6 +12,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.methods.base import TelegramMethod
 from fastapi import Request
 
+import agromat_it_desk_bot.config as config
 from agromat_it_desk_bot import main
 from tests.conftest import FakeTelegramSender
 
@@ -198,3 +201,39 @@ async def test_youtrack_update_retries_with_rest_data(
     edited_payload = fake_sender.edited_text[-1]
     assert 'Closed' in str(edited_payload['text'])
     assert 'New User' in str(edited_payload['text'])
+
+
+@pytest.mark.asyncio
+async def test_youtrack_update_archives_message_after_ttl(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_sender: FakeTelegramSender,
+) -> None:
+    """Після 48 годин бот не редагує повідомлення, а публікує архівний варіант."""
+    monkeypatch.setattr(main, 'YT_WEBHOOK_SECRET', None, raising=False)
+    monkeypatch.setattr(main, '_TELEGRAM_CHAT_ID_RESOLVED', 777_001, raising=False)
+
+    first_request = _StubRequest(_issue_payload('Open', '[не призначено]'))
+    await main.youtrack_webhook(cast(Request, first_request))
+
+    archived_timestamp: str = (datetime.now(tz=timezone.utc) - timedelta(hours=49)).isoformat()
+    with sqlite3.connect(str(config.DATABASE_PATH)) as connection:
+        connection.execute(
+            'UPDATE issue_messages SET updated_at = ? WHERE issue_id = ?',
+            (archived_timestamp, 'SUP-1'),
+        )
+        connection.commit()
+
+    payload: dict[str, object] = {
+        'idReadable': 'SUP-1',
+        'summary': 'Заявка тестова',
+        'description': 'Оновлений опис',
+        'status': 'Closed',
+        'assignee': 'Agent Smith',
+        'author': 'Reporter',
+        'changes': ['status'],
+    }
+    response = await main.youtrack_update(cast(Request, _StubRequest(payload)))
+
+    assert response == {'ok': True}
+    assert len(fake_sender.sent_messages) == 1, 'Не очікували нових повідомлень'
+    assert not fake_sender.edited_text, 'Редагувань бути не повинно'

@@ -9,7 +9,7 @@ from typing import Any, NamedTuple
 
 from fastapi import HTTPException, Request
 
-from agromat_it_desk_bot.auth import get_authorized_yt_user
+from agromat_it_desk_bot.auth import get_authorized_yt_user, get_user_token
 from agromat_it_desk_bot.config import TELEGRAM_WEBHOOK_SECRET, YOUTRACK_STATE_IN_PROGRESS, YT_BASE_URL
 from agromat_it_desk_bot.messages import Msg, render
 from agromat_it_desk_bot.telegram import context as telegram_context
@@ -132,6 +132,18 @@ async def handle_accept(issue_id: str, context: CallbackContext) -> None:
         await reply_authorization_required(context.callback_id)
         return
 
+    user_token: str | None
+    try:
+        user_token = await asyncio.to_thread(get_user_token, context.tg_user_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception('Не вдалося отримати токен користувача tg_user_id=%s: %s', context.tg_user_id, exc)
+        await reply_assign_error(context.callback_id)
+        return
+    if not user_token:
+        logger.info('Відсутній токен користувача, прийняття неможливе: tg_user_id=%s', context.tg_user_id)
+        await reply_token_required(context.callback_id)
+        return
+
     key: str = f'{context.chat_id}:{context.message_id}:{issue_id}'
     is_new: bool = await _register_accept_attempt(key)
     if not is_new:
@@ -139,7 +151,7 @@ async def handle_accept(issue_id: str, context: CallbackContext) -> None:
         await reply_success(context.callback_id)
         return
 
-    assigned: bool = await asyncio.to_thread(assign_issue, issue_id, login, email, yt_user_id)
+    assigned: bool = await asyncio.to_thread(assign_issue, issue_id, login, email, yt_user_id, user_token)
     if not assigned:
         await reply_assign_failed(context.callback_id)
         logger.warning('Не вдалося призначити задачу через callback: issue_id=%s', issue_id)
@@ -174,6 +186,11 @@ async def reply_assign_error(callback_id: str) -> None:
 async def reply_authorization_required(callback_id: str) -> None:
     """Пояснює, що потрібно авторизуватись перед прийняттям задачі."""
     await _sender().answer_callback(callback_id, text=render(Msg.ERR_CALLBACK_AUTH_REQUIRED), show_alert=True)
+
+
+async def reply_token_required(callback_id: str) -> None:
+    """Пояснює, що необхідно оновити персональний токен."""
+    await _sender().answer_callback(callback_id, text=render(Msg.ERR_CALLBACK_TOKEN_REQUIRED), show_alert=True)
 
 
 async def remove_keyboard(chat_id: int, message_id: int) -> None:

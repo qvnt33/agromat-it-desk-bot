@@ -26,6 +26,13 @@ _DEFAULT_AUTHOR: str = '[невідомо]'
 _DEFAULT_STATUS: str = '[невідомо]'
 _DEFAULT_ASSIGNEE: str = '[не призначено]'
 _EMAIL_SUMMARY_FALLBACK_PREFIX: str = 'проблема з електронним листом'
+_STATUS_EMOJI_MAP: dict[str, str] = {
+    'нова': '🔵',
+    'в роботі': '🟡',
+    'виконано': '🟢',
+}
+_STATUS_EMOJI_ARCHIVED: str = '⚪'
+_STATUS_EMOJI_DEFAULT: str = '🟤'
 
 
 class _HTMLStripper(HTMLParser):
@@ -294,14 +301,16 @@ def format_telegram_message(
     status_text: str = escape(status) if status else _DEFAULT_STATUS
     assignee_text: str = escape(assignee) if assignee else _DEFAULT_ASSIGNEE
 
-    header: str = f'Заявка {formatted_issue_id}'
+    status_emoji: str = _pick_status_emoji(status)
+    header_label: str = f'Заявка {formatted_issue_id}'
 
     url_clean: str = url.strip()
     if url_clean and url_clean.lower().startswith(('http://', 'https://')):
-        header = f'<a href="{escape(url_clean, quote=True)}">{header}</a>'
+        header_label = f'<a href="{escape(url_clean, quote=True)}">{header_label}</a>'
 
     if summary_formatted:
-        header = f'{header} — <b>{summary_formatted}</b>'
+        header_label = f'{header_label} — <b>{summary_formatted}</b>'
+    header: str = f'{status_emoji} {header_label}'
 
     telegram_msg: str = TELEGRAM_MAIN_MESSAGE_TEMPLATE.format(
         header=header,
@@ -311,6 +320,19 @@ def format_telegram_message(
         description=description_text,
     )
     return telegram_msg
+
+
+def _pick_status_emoji(status: str | None) -> str:
+    """Повертає емодзі відповідно до статусу."""
+    if not status:
+        return _STATUS_EMOJI_DEFAULT
+    normalized: str = status.strip().casefold()
+    if not normalized:
+        return _STATUS_EMOJI_DEFAULT
+    archived_token: str = render(Msg.STATUS_ARCHIVED).casefold()
+    if normalized == archived_token:
+        return _STATUS_EMOJI_ARCHIVED
+    return _STATUS_EMOJI_MAP.get(normalized, _STATUS_EMOJI_DEFAULT)
 
 
 def resolve_from_map(tg_user_id: int | None) -> tuple[str | None, str | None, str | None]:

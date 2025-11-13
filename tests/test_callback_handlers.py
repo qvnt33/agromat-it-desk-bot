@@ -26,6 +26,7 @@ async def test_handle_accept_assigns_issue(
     """Авторизований користувач має призначати задачу та отримувати підтвердження."""
     monkeypatch.setattr(handlers, 'assign_issue', lambda *_: True)
     monkeypatch.setattr(handlers, 'get_authorized_yt_user', lambda _tg_user_id: ('login', 'mail', 'YT-1'))
+    monkeypatch.setattr(handlers, 'get_user_token', lambda _tg_user_id: 'user-token')
 
     def stub_details(_issue_id: str) -> SimpleNamespace:
         return SimpleNamespace(
@@ -85,6 +86,7 @@ async def test_handle_accept_duplicate_is_idempotent(
 
     monkeypatch.setattr(handlers, 'assign_issue', fake_assign, raising=False)
     monkeypatch.setattr(handlers, 'get_authorized_yt_user', lambda _tg_user_id: ('login', 'mail', 'YT-1'))
+    monkeypatch.setattr(handlers, 'get_user_token', lambda _tg_user_id: 'user-token')
 
     def stub_duplicate_details(_issue_id: str) -> SimpleNamespace:
         return SimpleNamespace(
@@ -125,3 +127,19 @@ async def test_handle_accept_requires_auth_every_time(
     auth_required_text: str = render(Msg.ERR_CALLBACK_AUTH_REQUIRED)
     shown: list[str | None] = [cast(str | None, answer['text']) for answer in fake_sender.callback_answers]
     assert shown == [auth_required_text, auth_required_text]
+
+
+async def test_handle_accept_requires_fresh_token(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_sender: FakeTelegramSender,
+    callback_context: handlers.CallbackContext,
+) -> None:
+    """Якщо токен відсутній, користувач отримує інструкцію оновити /connect."""
+    monkeypatch.setattr(handlers, 'assign_issue', lambda *_: True)
+    monkeypatch.setattr(handlers, 'get_authorized_yt_user', lambda _tg_user_id: ('login', 'mail', 'YT-1'))
+    monkeypatch.setattr(handlers, 'get_user_token', lambda _tg_user_id: None)
+
+    await handlers.handle_accept('SUP-5', callback_context)
+
+    texts = [cast(str | None, answer['text']) for answer in fake_sender.callback_answers]
+    assert render(Msg.ERR_CALLBACK_TOKEN_REQUIRED) in texts
