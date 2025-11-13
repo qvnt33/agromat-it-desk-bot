@@ -31,7 +31,7 @@ async def test_handle_accept_assigns_issue(
     def stub_details(_issue_id: str) -> SimpleNamespace:
         return SimpleNamespace(
             summary='Заявка',
-            description='Опис',
+            description='<div>Опис</div>',
             assignee='Agent Smith',
             status='In Progress',
             author='Reporter',
@@ -55,6 +55,7 @@ async def test_handle_accept_assigns_issue(
     assert 'Agent Smith' in str(updated_message)
     assert 'Статус:' in str(updated_message)
     assert 'In Progress' in str(updated_message)
+    assert '<div>' not in str(updated_message)
 
 
 async def test_handle_accept_fails_for_unknown_user(

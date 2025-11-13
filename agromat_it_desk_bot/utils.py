@@ -26,6 +26,7 @@ _DEFAULT_AUTHOR: str = '[невідомо]'
 _DEFAULT_STATUS: str = '[невідомо]'
 _DEFAULT_ASSIGNEE: str = '[не призначено]'
 _EMAIL_SUMMARY_FALLBACK_PREFIX: str = 'проблема з електронним листом'
+_HTML_COMMENT_RE = re.compile(r'<!--.*?-->', re.DOTALL)
 _STATUS_EMOJI_MAP: dict[str, str] = {
     'нова': '🔵',
     'в роботі': '🟡',
@@ -65,6 +66,7 @@ class _HTMLStripper(HTMLParser):
 
 def strip_html(value: str) -> str:
     """Видаляє HTML-теги та розкодовує сутності."""
+    value = _HTML_COMMENT_RE.sub('', value)
     stripper = _HTMLStripper()
     stripper.feed(value)
     text = stripper.get_data()

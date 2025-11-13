@@ -16,10 +16,12 @@ from .youtrack_client import (
     find_state_value_id,
     find_user,
     get_issue_internal_id,
+    update_issue_summary,
 )
 
 from agromat_it_desk_bot.auth import get_authorized_yt_user
 from agromat_it_desk_bot.config import YOUTRACK_STATE_FIELD_NAME, YOUTRACK_STATE_IN_PROGRESS
+from agromat_it_desk_bot.messages import Msg, render
 from agromat_it_desk_bot.utils import extract_issue_assignee, extract_issue_author, extract_issue_status
 
 logging.basicConfig(level=logging.INFO)
@@ -187,3 +189,19 @@ def _ensure_in_progress(issue_id: str, issue_id_readable: str, auth_token: str |
 
     logger.warning('Не вдалося оновити статус задачі %s на %s', issue_id_readable, desired_state)
     return False
+
+
+def ensure_summary_placeholder(
+    issue_id_readable: str,
+    normalized_summary: str,
+    issue_internal_id: str | None = None,
+) -> None:
+    """Оновлює summary задачі у YouTrack, якщо потрібно підставити плейсхолдер."""
+    placeholder: str = render(Msg.YT_EMAIL_SUBJECT_MISSING)
+    if normalized_summary != placeholder:
+        return
+    target_id: str = issue_internal_id or issue_id_readable
+    if update_issue_summary(target_id, normalized_summary):
+        logger.info('Summary задачі %s оновлено на плейсхолдер', issue_id_readable)
+    else:
+        logger.warning('Не вдалося оновити summary задачі %s', issue_id_readable)

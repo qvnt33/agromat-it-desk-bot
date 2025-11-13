@@ -34,7 +34,11 @@ from agromat_it_desk_bot.utils import (
     normalize_issue_summary,
     strip_html,
 )
-from agromat_it_desk_bot.youtrack.youtrack_service import IssueDetails, fetch_issue_details
+from agromat_it_desk_bot.youtrack.youtrack_service import (
+    IssueDetails,
+    ensure_summary_placeholder,
+    fetch_issue_details,
+)
 
 configure_logging()
 logger: logging.Logger = logging.getLogger(__name__)
@@ -131,12 +135,10 @@ def _build_log_entry(payload: Mapping[str, object]) -> dict[str, object]:
         value: object | None = issue.get(key)
         if value is None:
             continue
-        text_value: str | None
+        text_value: str = str(value) if isinstance(value, (int, float, bool)) else str(value).strip()
         if key == 'summary':
-            text_value = normalize_issue_summary(str(value) if not isinstance(value, (int, float, bool)) else str(value))
-        else:
-            text_value = str(value).strip() if not isinstance(value, (int, float, bool)) else str(value)
-        log_entry[key] = text_value if text_value is not None else value
+            text_value = normalize_issue_summary(text_value)
+        log_entry[key] = text_value
     description_obj: object | None = issue.get('description')
     if isinstance(description_obj, str):
         description_text: str = strip_html(description_obj).strip()
@@ -324,6 +326,10 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:  # noqa: C901
     issue: Mapping[str, object] = issue_candidate if isinstance(issue_candidate, dict) else payload
 
     issue_id, summary, description, url_val, assignee_text, status_text, author_text = _prepare_issue_payload(issue)
+    internal_id_obj: object | None = issue.get('id')
+    internal_id: str | None = str(internal_id_obj) if isinstance(internal_id_obj, str) else None
+    if summary == render(Msg.YT_EMAIL_SUBJECT_MISSING):
+        await asyncio.to_thread(ensure_summary_placeholder, issue_id, summary, internal_id)
 
     payload_for_logging = _prepare_payload_for_logging(payload)
     logger.info('Отримано вебхук YouTrack: %s', _build_log_entry(payload_for_logging))
@@ -415,8 +421,10 @@ async def youtrack_update(request: Request) -> dict[str, bool]:  # noqa: C901
     if needs_details:
         details = await asyncio.to_thread(fetch_issue_details, issue_id)
 
-    summary: str = summary_payload or (details.summary if details else '')
-    description: str = description_payload or (details.description if details else '')
+    fallback_summary: str = normalize_issue_summary(str(details.summary or '')) if details else ''
+    fallback_description: str = strip_html(str(details.description or '')) if details else ''
+    summary: str = summary_payload or fallback_summary
+    description: str = description_payload or fallback_description
     author_text: str | None = author_payload or (details.author if details else None)
     status_text: str | None = status_payload or (details.status if details else None)
     assignee_text: str | None = assignee_payload or (details.assignee if details else None)

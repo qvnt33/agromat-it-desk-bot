@@ -14,6 +14,7 @@ from fastapi import Request
 
 import agromat_it_desk_bot.config as config
 from agromat_it_desk_bot import main
+from agromat_it_desk_bot.messages import Msg, render
 from tests.conftest import FakeTelegramSender
 
 
@@ -237,3 +238,36 @@ async def test_youtrack_update_archives_message_after_ttl(
     assert response == {'ok': True}
     assert len(fake_sender.sent_messages) == 1, 'Не очікували нових повідомлень'
     assert not fake_sender.edited_text, 'Редагувань бути не повинно'
+
+
+@pytest.mark.asyncio
+async def test_youtrack_webhook_triggers_summary_placeholder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Порожня тема має замінюватися у YouTrack через ensure_summary_placeholder."""
+    monkeypatch.setattr(main, 'YT_WEBHOOK_SECRET', None, raising=False)
+    monkeypatch.setattr(main, '_TELEGRAM_CHAT_ID_RESOLVED', 777_001, raising=False)
+
+    placeholder_calls: list[tuple[str, str, str | None]] = []
+
+    def fake_ensure(issue_id: str, summary: str, internal_id: str | None = None) -> None:
+        placeholder_calls.append((issue_id, summary, internal_id))
+
+    monkeypatch.setattr(main, 'ensure_summary_placeholder', fake_ensure, raising=False)
+
+    payload: dict[str, object] = {
+        'idReadable': 'SUP-EMAIL',
+        'summary': 'Проблема з електронним листом від someone',
+        'description': '<div>HTML</div>',
+        'url': 'https://yt.example/issue/SUP-EMAIL',
+        'author': 'Reporter',
+        'status': 'Нова',
+        'assignee': '',
+    }
+    await main.youtrack_webhook(cast(Request, _StubRequest(payload)))
+
+    assert placeholder_calls
+    issue_id, summary, internal_id = placeholder_calls[-1]
+    assert issue_id == 'SUP-EMAIL'
+    assert summary == render(Msg.YT_EMAIL_SUBJECT_MISSING)
+    assert internal_id is None

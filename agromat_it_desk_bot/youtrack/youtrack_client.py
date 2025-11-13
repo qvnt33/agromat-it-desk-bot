@@ -297,3 +297,19 @@ def _base_headers(token_override: str | None = None) -> dict[str, str]:
         'Accept': 'application/json',
         'Content-Type': 'application/json',
     }
+
+
+def update_issue_summary(issue_id: str, summary: str) -> bool:
+    """Оновлює summary задачі через REST API."""
+    headers: dict[str, str] = _base_headers()
+    response: requests.Response = requests.post(
+        f'{YT_BASE_URL}/api/issues/{issue_id}',
+        params={'fields': 'id'},
+        json={'summary': summary},
+        headers=headers,
+        timeout=10,
+    )
+    if not response.ok:
+        logger.debug('Не вдалося оновити summary issue=%s: %s', issue_id, response.text)
+        return False
+    return True
