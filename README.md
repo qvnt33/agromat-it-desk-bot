@@ -49,6 +49,7 @@
 | `YT_TOKEN`          | сервісний токен (для технічних REST-запитів)                      |
 | `YT_WEBHOOK_SECRET` | секрет, яким підписуються вебхуки Automation App                  |
 | `USER_TOKEN_SECRET` | ключ для шифрування персональних токенів (обов’язково налаштувати)|
+| `DATABASE_PATH` або `DATABASE_DIR`+`DATABASE_FILENAME` | шлях до SQLite (за замовчуванням `./data/bot.sqlite3`) |
 
 ### Швидке розгортання
 1. Скопіюйте `.env.example` у `.env`, заповніть потрібні значення.

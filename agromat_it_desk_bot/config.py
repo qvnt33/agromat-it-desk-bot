@@ -36,7 +36,13 @@ PROJECT_KEY: str | None = os.getenv('YT_PROJECT_KEY')
 PROJECT_ID: str | None = os.getenv('YT_PROJECT_ID')
 
 # Шлях до локальної БД користувачів
-DATABASE_PATH: Path = Path(os.getenv('DATABASE_PATH', './data/bot.sqlite3'))
+_DATABASE_PATH_ENV: str | None = os.getenv('DATABASE_PATH')
+if _DATABASE_PATH_ENV:
+    DATABASE_PATH: Path = Path(_DATABASE_PATH_ENV)
+else:
+    DATABASE_DIR: Path = Path(os.getenv('DATABASE_DIR', './data'))
+    DATABASE_FILENAME: str = os.getenv('DATABASE_FILENAME', 'bot.sqlite3').strip() or 'bot.sqlite3'
+    DATABASE_PATH = DATABASE_DIR / DATABASE_FILENAME
 
 # Таймаути та кількість спроб перевірки токенів YouTrack
 YT_VALIDATE_TIMEOUT: float = float(os.getenv('YT_VALIDATE_TIMEOUT', '5.0'))
