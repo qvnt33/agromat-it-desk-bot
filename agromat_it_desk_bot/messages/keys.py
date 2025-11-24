@@ -49,6 +49,8 @@ class Msg(str, Enum):
     UNLINK_CONFIRM_YES_BUTTON = 'unlink.confirm_yes_button'
     UNLINK_CONFIRM_NO_BUTTON = 'unlink.confirm_no_button'
     UNLINK_CANCELLED = 'unlink.cancelled'
+    SCHEDULE_WEEKLY_BODY = 'schedule.weekly_body'
+    SCHEDULE_DAILY_ENTRY = 'schedule.daily_entry'
 
     # Помилки та попередження
     ERR_TG_ID_UNAVAILABLE = 'err.tg_id_unavailable'

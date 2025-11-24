@@ -7,6 +7,40 @@ from dotenv import find_dotenv, load_dotenv
 
 load_dotenv(find_dotenv())
 
+
+def _env_bool(value: str | None, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    return normalized in {'1', 'true', 'yes', 'on'}
+
+
+def _env_int(value: str | None, *, default: int) -> int:
+    if value is None:
+        return default
+    try:
+        return int(value.strip())
+    except ValueError:
+        return default
+
+
+def _env_time(value: str | None, *, fallback: tuple[int, int]) -> tuple[int, int]:
+    if value is None:
+        return fallback
+    parts = value.strip().split(':', 1)
+    if len(parts) != 2:
+        return fallback
+    hour_str, minute_str = parts
+    try:
+        hour_val = int(hour_str)
+        minute_val = int(minute_str)
+    except ValueError:
+        return fallback
+    if 0 <= hour_val <= 23 and 0 <= minute_val <= 59:
+        return hour_val, minute_val
+    return fallback
+
+
 # Вказують токен бота Telegram (обовʼязково)
 BOT_TOKEN: str | None = os.getenv('BOT_TOKEN')
 
@@ -71,3 +105,23 @@ TELEGRAM_MAIN_MESSAGE_TEMPLATE = (
     '\n'
     '{description}'
 )
+
+# Налаштування тижневого розкладу (Outlook/Exchange)
+SCHEDULE_ENABLED: bool = _env_bool(os.getenv('SCHEDULE_ENABLED'))
+SCHEDULE_CHAT_ID: str | None = os.getenv('SCHEDULE_CHAT_ID') or TELEGRAM_CHAT_ID
+SCHEDULE_PIN_WEEKLY: bool = _env_bool(os.getenv('SCHEDULE_PIN_WEEKLY'))
+SCHEDULE_EXCHANGE_EMAIL: str | None = os.getenv('SCHEDULE_EXCHANGE_EMAIL')
+SCHEDULE_EXCHANGE_USERNAME: str | None = os.getenv('SCHEDULE_EXCHANGE_USERNAME') or SCHEDULE_EXCHANGE_EMAIL
+SCHEDULE_EXCHANGE_PASSWORD: str | None = os.getenv('SCHEDULE_EXCHANGE_PASSWORD')
+SCHEDULE_EXCHANGE_SERVER: str | None = os.getenv('SCHEDULE_EXCHANGE_SERVER')
+SCHEDULE_CALENDAR_NAME: str | None = os.getenv('SCHEDULE_CALENDAR_NAME')
+SCHEDULE_TIMEZONE: str = os.getenv('SCHEDULE_TIMEZONE', 'Europe/Kyiv')
+SCHEDULE_SEND_WEEKDAY: int = _env_int(os.getenv('SCHEDULE_SEND_WEEKDAY'), default=6)
+_SCHEDULE_HOUR, _SCHEDULE_MINUTE = _env_time(os.getenv('SCHEDULE_SEND_TIME'), fallback=(9, 0))
+SCHEDULE_SEND_HOUR: int = _SCHEDULE_HOUR
+SCHEDULE_SEND_MINUTE: int = _SCHEDULE_MINUTE
+SCHEDULE_DAILY_REMINDER_ENABLED: bool = _env_bool(os.getenv('SCHEDULE_DAILY_REMINDER_ENABLED'))
+SCHEDULE_DAILY_REMINDER_CHAT_ID: str | None = os.getenv('SCHEDULE_DAILY_REMINDER_CHAT_ID') or SCHEDULE_CHAT_ID
+_REMINDER_HOUR, _REMINDER_MINUTE = _env_time(os.getenv('SCHEDULE_DAILY_REMINDER_TIME'), fallback=(18, 0))
+SCHEDULE_DAILY_REMINDER_HOUR: int = _REMINDER_HOUR
+SCHEDULE_DAILY_REMINDER_MINUTE: int = _REMINDER_MINUTE

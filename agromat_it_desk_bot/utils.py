@@ -28,8 +28,8 @@ _DEFAULT_ASSIGNEE: str = '[не призначено]'
 _EMAIL_SUMMARY_FALLBACK_PREFIX: str = 'проблема з електронним листом'
 _HTML_COMMENT_RE = re.compile(r'<!--.*?-->', re.DOTALL)
 _STATUS_EMOJI_MAP: dict[str, str] = {
-    'нова': '🔵',
-    'в роботі': '🟡',
+    'нова': '🟡',
+    'в роботі': '🔵',
     'виконано': '🟢',
 }
 _STATUS_EMOJI_ARCHIVED: str = '⚪'

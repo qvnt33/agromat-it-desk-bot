@@ -53,6 +53,8 @@ UK: Mapping[Msg, str] = {
     Msg.UNLINK_CONFIRM_YES_BUTTON: '✅ Так, відʼєднати',
     Msg.UNLINK_CONFIRM_NO_BUTTON: '🚫 Залишити як є',
     Msg.UNLINK_CANCELLED: '❎ Відʼєднання скасовано.',
+    Msg.SCHEDULE_WEEKLY_BODY: '📅 <b>{start}–{end}</b>\n\n{body}',
+    Msg.SCHEDULE_DAILY_ENTRY: '🔔 <b>Завтра, {weekday} ({date}):</b> {body}',
 
     Msg.AUTH_LINK_TEMPORARY: '⚠️ YouTrack зараз недоступний. Спробуй трохи пізніше.',
     Msg.AUTH_LINK_CONFIG: '⚙️ Помилка конфігурації сервера.',

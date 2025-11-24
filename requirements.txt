@@ -15,6 +15,7 @@ h11==0.16.0
 idna==3.10
 iniconfig==2.1.0
 magic-filter==1.0.12
+exchangelib==5.4.2
 multidict==6.6.4
 packaging==25.0
 pluggy==1.6.0

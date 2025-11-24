@@ -19,6 +19,12 @@ from fastapi import FastAPI, HTTPException, Request
 from agromat_it_desk_bot.callback_handlers import verify_telegram_secret
 from agromat_it_desk_bot.config import BOT_TOKEN, TELEGRAM_CHAT_ID, YT_BASE_URL, YT_WEBHOOK_SECRET
 from agromat_it_desk_bot.messages import Msg, render
+from agromat_it_desk_bot.schedule import (
+    DailyReminder,
+    SchedulePublisher,
+    build_daily_reminder,
+    build_schedule_publisher,
+)
 from agromat_it_desk_bot.storage import fetch_issue_message, upsert_issue_message
 from agromat_it_desk_bot.telegram import context as telegram_context
 from agromat_it_desk_bot.telegram import telegram_aiogram, telegram_commands
@@ -283,10 +289,20 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     sender = AiogramTelegramSender(bot)
     telegram_commands.configure_sender(sender)
     telegram_aiogram.configure(bot, dispatcher)
+    schedule_publisher: SchedulePublisher | None = build_schedule_publisher(sender)
+    if schedule_publisher is not None:
+        schedule_publisher.start()
+    daily_reminder: DailyReminder | None = build_daily_reminder(sender)
+    if daily_reminder is not None:
+        daily_reminder.start()
 
     try:
         yield
     finally:
+        if daily_reminder is not None:
+            await daily_reminder.stop()
+        if schedule_publisher is not None:
+            await schedule_publisher.stop()
         # Закривають HTTP-сесію бота Aiogram при виході
         await telegram_aiogram.shutdown()
 

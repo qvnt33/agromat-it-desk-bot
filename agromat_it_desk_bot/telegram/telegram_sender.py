@@ -60,6 +60,14 @@ class TelegramSender(Protocol):
         disable_web_page_preview: bool = True,
     ) -> None: ...
 
+    async def pin_message(
+        self,
+        chat_id: int | str,
+        message_id: int,
+        *,
+        disable_notification: bool = True,
+    ) -> None: ...
+
 
 class AiogramTelegramSender:
     """Реалізація TelegramSender поверх aiogram.Bot з підтримкою Retry-After."""
@@ -150,6 +158,21 @@ class AiogramTelegramSender:
             parse_mode=parse_mode,
             reply_markup=reply_markup,
             disable_web_page_preview=disable_web_page_preview,
+            request_timeout=self._request_timeout,
+        )
+
+    async def pin_message(
+        self,
+        chat_id: int | str,
+        message_id: int,
+        *,
+        disable_notification: bool = True,
+    ) -> None:
+        await self._request_with_retry(
+            self._bot.pin_chat_message,
+            chat_id=chat_id,
+            message_id=message_id,
+            disable_notification=disable_notification,
             request_timeout=self._request_timeout,
         )
 

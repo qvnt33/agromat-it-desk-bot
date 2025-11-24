@@ -13,6 +13,8 @@
 - Призначає задачі в YouTrack **персональним токеном** користувача.
 - Підтримує актуальний статус/опис/виконавця в Telegram, доки повідомленню не виповниться 48 годин.
 - Після 48 годин заявка вважається **архівованою**: бот перестає редагувати повідомлення та лише фіксує в логах статус «Архівовано».
+- (Опційно) Щотижня публікує розклад змін з Outlook/Exchange у Telegram і автоматично закріплює повідомлення.
+- (Опційно) Щодня о заданій годині надсилає нагадування, хто чергує завтра.
 
 ---
 
@@ -50,6 +52,24 @@
 | `YT_WEBHOOK_SECRET` | секрет, яким підписуються вебхуки Automation App                  |
 | `USER_TOKEN_SECRET` | ключ для шифрування персональних токенів (обов’язково налаштувати)|
 | `DATABASE_PATH` або `DATABASE_DIR`+`DATABASE_FILENAME` | шлях до SQLite (за замовчуванням `./data/bot.sqlite3`) |
+
+### Розклад змін (опційно)
+| Змінна                       | Призначення                                                                 |
+|------------------------------|------------------------------------------------------------------------------|
+| `SCHEDULE_ENABLED`           | `true/false`, вмикає щотижневу розсилку                                      |
+| `SCHEDULE_CHAT_ID`           | чат для повідомлення (за замовчуванням `TELEGRAM_CHAT_ID`)                  |
+| `SCHEDULE_EXCHANGE_EMAIL`    | поштова скринька з календарем змін                                          |
+| `SCHEDULE_EXCHANGE_USERNAME` | логін для EWS (якщо відрізняється від email)                                |
+| `SCHEDULE_EXCHANGE_PASSWORD` | пароль/додаткова парольна фраза                                             |
+| `SCHEDULE_EXCHANGE_SERVER`   | кастомний хост Exchange (якщо `autodiscover` не працює)                     |
+| `SCHEDULE_CALENDAR_NAME`     | альтернативна назва календаря (якщо не стандартний «Calendar»)              |
+| `SCHEDULE_TIMEZONE`          | назва часової зони (default: `Europe/Kyiv`)                                 |
+| `SCHEDULE_SEND_WEEKDAY`      | день, коли надсилати, `0=Пн ... 6=Нд` (default: `6`)                        |
+| `SCHEDULE_SEND_TIME`         | локальний час у форматі `HH:MM` (default: `09:00`)                          |
+| `SCHEDULE_PIN_WEEKLY`        | `true/false`, автозакріплення щотижневого повідомлення                      |
+| `SCHEDULE_DAILY_REMINDER_ENABLED` | `true/false`, вмикає щоденне нагадування                              |
+| `SCHEDULE_DAILY_REMINDER_CHAT_ID` | чат для нагадування (default: `SCHEDULE_CHAT_ID`)                     |
+| `SCHEDULE_DAILY_REMINDER_TIME`    | час нагадування, `HH:MM` (default: `18:00`)                           |
 
 ### Швидке розгортання
 1. Скопіюйте `.env.example` у `.env`, заповніть потрібні значення.
