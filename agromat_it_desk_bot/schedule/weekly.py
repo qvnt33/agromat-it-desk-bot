@@ -90,29 +90,20 @@ class ExchangeScheduleClient:
     def fetch_range(self, start: datetime, end: datetime) -> list[ShiftEntry]:
         """Зчитує події календаря у довільному діапазоні."""
         try:
-            from exchangelib import DELEGATE, Account, Configuration, Credentials
+            from exchangelib import Build, Configuration, Credentials, Version
         except ImportError as exc:  # pragma: no cover
             raise RuntimeError('exchangelib не встановлено, розклад недоступний') from exc
 
         credentials = Credentials(username=self._source.username, password=self._source.password)
+        config_obj: Configuration | None = None
         if self._source.server:
-            exch_config = Configuration(server=self._source.server, credentials=credentials)
-            account = Account(
-                primary_smtp_address=self._source.email,
-                config=exch_config,
+            config_obj = Configuration(
+                server=self._source.server,
                 credentials=credentials,
-                autodiscover=False,
-                access_type=DELEGATE,
+                version=Version(build=Build(major_version=15, minor_version=0)),
             )
-        else:
-            account = Account(
-                primary_smtp_address=self._source.email,
-                credentials=credentials,
-                autodiscover=True,
-                access_type=DELEGATE,
-            )
-
-        folder = self._resolve_calendar(account)
+        service_account = self._build_account(self._source.email, credentials, config_obj)
+        folder = self._resolve_calendar(service_account, credentials, config_obj)
         items = folder.view(start=start, end=end).order_by('start').only('subject', 'start', 'end', 'categories')
         shifts: list[ShiftEntry] = []
         for item in items:
@@ -130,28 +121,61 @@ class ExchangeScheduleClient:
             shifts.append(ShiftEntry(subject=subject or 'Без назви', start=start_dt, end=end_dt, categories=categories))
         return shifts
 
-    def _resolve_calendar(self, account: Any) -> Any:  # noqa: ANN401
-        """Знаходить календар за назвою або повертає дефолтний."""
+    def _build_account(
+        self,
+        email: str,
+        credentials: Any,  # noqa: ANN401
+        config: Any | None,  # noqa: ANN401
+    ) -> Any:  # noqa: ANN401
+        from exchangelib import Account, DELEGATE  # type: ignore[import-not-found]
+
+        if config is not None:
+            return Account(
+                primary_smtp_address=email,
+                config=config,
+                credentials=credentials,
+                autodiscover=False,
+                access_type=DELEGATE,
+            )
+        return Account(
+            primary_smtp_address=email,
+            credentials=credentials,
+            autodiscover=True,
+            access_type=DELEGATE,
+        )
+
+    def _resolve_calendar(self, account: Any, credentials: Any, config: Any | None) -> Any:  # noqa: ANN401
+        """Знаходить загальний календар за назвою через resolve_names або повертає власний."""
         folder = account.calendar
         if not self._source.calendar_name:
             return folder
 
         candidate_name: str = self._source.calendar_name.strip()
         try:
-            iterator = account.root.walk()
+            # resolve_names може повертати генератор – одразу перетворюємо в list
+            matches = list(account.protocol.resolve_names([candidate_name]))
         except Exception as exc:  # noqa: BLE001
-            logger.warning('Не вдалося перерахувати календарі %s: %s', candidate_name, exc)
+            logger.warning('Не вдалося знайти календар %s: %s', candidate_name, exc)
             return folder
 
-        candidate_norm = candidate_name.casefold()
-        for entry in iterator:
-            folder_name: str = getattr(entry, 'name', '').strip()
-            if folder_name.casefold() == candidate_norm:
-                logger.info('Знайдено календар %s', folder_name)
-                return entry
+        if not matches:
+            logger.warning('Не знайдено поштову скриньку для календаря %s (resolve_names повернув 0 збігів)', candidate_name)
+            return folder
 
-        logger.warning('Не знайдено календар %s, використовую стандартний', candidate_name)
-        return folder
+        candidate = matches[0]
+        target_email = getattr(candidate, 'email_address', None)
+        if not target_email:
+            logger.warning('resolve_names повернув обʼєкт без email_address для %s: %r', candidate_name, candidate)
+            return folder
+
+        try:
+            shared_account = self._build_account(target_email, credentials, config)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning('Не вдалося підключитися до календаря %s (%s): %s', candidate_name, target_email, exc)
+            return folder
+
+        logger.info('Використовую календар %s (%s)', candidate_name, target_email)
+        return shared_account.calendar
 
 
 class SchedulePublisher:
@@ -269,7 +293,7 @@ class SchedulePublisher:
         if not subjects:
             subjects.append(_format_subject(None, ()))
         body = ', '.join(subjects)
-        return f'<b>{weekday} ({day_label}) – </b>{body}'
+        return f'<b>{weekday} ({day_label}) — </b>{body}'
 
 
 class DailyReminder:
@@ -340,23 +364,49 @@ class DailyReminder:
         return render(Msg.SCHEDULE_DAILY_ENTRY, date=date_label, weekday=weekday, body=body)
 
 
-def _render_shift_label(categories: Sequence[str]) -> str:
-    for category in categories:
-        normalized = category.strip()
-        if normalized:
-            return escape_html(normalized)
-    return ''
-
-
 def _format_subject(name: str | None, categories: Sequence[str]) -> str:
     text_raw: str = name.strip() if isinstance(name, str) else ''
     if not text_raw:
         text_raw = 'N/A'
-    subject = f'<code>{escape_html(text_raw)}</code>'
-    label = _render_shift_label(categories)
-    if label:
-        return f'{subject} — {label}'
-    return subject
+    return f'<code>{escape_html(text_raw)}</code>'
+
+
+def _extract_email_address(entry: Any) -> str | None:  # noqa: ANN401
+    email_candidate = _normalize_email(entry)
+    if email_candidate:
+        return email_candidate
+    mailbox_obj = getattr(entry, 'mailbox', None)
+    return _normalize_email(mailbox_obj)
+
+
+def _normalize_email(value: Any) -> str | None:  # noqa: ANN401
+    if value is None:
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+        return text or None
+    nested = getattr(value, 'email_address', None)
+    if isinstance(nested, str):
+        text = nested.strip()
+        return text or None
+    if hasattr(nested, 'email'):
+        nested_email = getattr(nested, 'email', None)
+        if isinstance(nested_email, str):
+            text = nested_email.strip()
+            return text or None
+    direct_email = getattr(value, 'email', None)
+    if isinstance(direct_email, str):
+        text = direct_email.strip()
+        return text or None
+    if isinstance(value, dict):
+        options: tuple[str, ...] = ('email_address', 'email')
+        for option in options:
+            raw = value.get(option)
+            if isinstance(raw, str):
+                text = raw.strip()
+                if text:
+                    return text
+    return None
 
 
 def build_schedule_publisher(sender: TelegramSender) -> SchedulePublisher | None:

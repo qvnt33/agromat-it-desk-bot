@@ -137,8 +137,8 @@ def test_format_message_with_shifts(publisher: SchedulePublisher) -> None:
 
     result = publisher._format_message(start, end, shifts)
 
-    assert '<b>Будні</b>\n<b>Пн (06.01) – </b><code>Белоус</code> — Друга зміна' in result
-    assert '<b>Вихідні</b>\n<b>Сб (11.01) – </b><code>Навроцький</code> — Черговий' in result
+    assert '🕗 <b>Будні</b>\n<b>Пн (06.01) — </b><code>Белоус</code>' in result
+    assert '🚨 <b>Вихідні</b>\n<b>Сб (11.01) — </b><code>Навроцький</code>' in result
 
 
 def test_daily_reminder_without_shifts(reminder: DailyReminder) -> None:
@@ -169,4 +169,4 @@ def test_daily_reminder_with_shifts(reminder: DailyReminder) -> None:
 
     result = reminder._format_message(target_day, shifts)
 
-    assert result == '🔔 Завтра, <b>Пн (06.01)</b>: <code>Белоус</code> — Друга зміна'
+    assert result == '🔔 <b>Завтра, Пн (06.01):</b> <code>Белоус</code>'
