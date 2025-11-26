@@ -12,12 +12,8 @@ from zoneinfo import ZoneInfo
 
 from agromat_it_desk_bot.config import (
     SCHEDULE_CALENDAR_NAME,
-    SCHEDULE_CHAT_ID,
-    SCHEDULE_DAILY_REMINDER_CHAT_ID,
-    SCHEDULE_DAILY_REMINDER_ENABLED,
     SCHEDULE_DAILY_REMINDER_HOUR,
     SCHEDULE_DAILY_REMINDER_MINUTE,
-    SCHEDULE_ENABLED,
     SCHEDULE_EXCHANGE_EMAIL,
     SCHEDULE_EXCHANGE_PASSWORD,
     SCHEDULE_EXCHANGE_SERVER,
@@ -27,6 +23,7 @@ from agromat_it_desk_bot.config import (
     SCHEDULE_SEND_MINUTE,
     SCHEDULE_SEND_WEEKDAY,
     SCHEDULE_TIMEZONE,
+    TELEGRAM_CHAT_ID,
 )
 from agromat_it_desk_bot.messages import Msg, render
 from agromat_it_desk_bot.telegram.telegram_sender import TelegramSender, escape_html
@@ -127,7 +124,7 @@ class ExchangeScheduleClient:
         credentials: Any,  # noqa: ANN401
         config: Any | None,  # noqa: ANN401
     ) -> Any:  # noqa: ANN401
-        from exchangelib import Account, DELEGATE  # type: ignore[import-not-found]
+        from exchangelib import DELEGATE, Account
 
         if config is not None:
             return Account(
@@ -159,7 +156,9 @@ class ExchangeScheduleClient:
             return folder
 
         if not matches:
-            logger.warning('Не знайдено поштову скриньку для календаря %s (resolve_names повернув 0 збігів)', candidate_name)
+            logger.warning('Не знайдено поштову скриньку для календаря %s '
+                           '(resolve_names повернув 0 збігів)',
+                           candidate_name)
             return folder
 
         candidate = matches[0]
@@ -364,7 +363,7 @@ class DailyReminder:
         return render(Msg.SCHEDULE_DAILY_ENTRY, date=date_label, weekday=weekday, body=body)
 
 
-def _format_subject(name: str | None, categories: Sequence[str]) -> str:
+def _format_subject(name: str | None, _categories: Sequence[str]) -> str:
     text_raw: str = name.strip() if isinstance(name, str) else ''
     if not text_raw:
         text_raw = 'N/A'
@@ -379,7 +378,7 @@ def _extract_email_address(entry: Any) -> str | None:  # noqa: ANN401
     return _normalize_email(mailbox_obj)
 
 
-def _normalize_email(value: Any) -> str | None:  # noqa: ANN401
+def _normalize_email(value: Any) -> str | None:  # noqa: ANN401,C901
     if value is None:
         return None
     if isinstance(value, str):
@@ -411,11 +410,9 @@ def _normalize_email(value: Any) -> str | None:  # noqa: ANN401
 
 def build_schedule_publisher(sender: TelegramSender) -> SchedulePublisher | None:
     """Створює публікатор розкладу, якщо ввімкнено відповідні налаштування."""
-    if not SCHEDULE_ENABLED:
-        logger.info('Щотижневий розклад вимкнено через SCHEDULE_ENABLED')
-        return None
-    if not SCHEDULE_CHAT_ID:
-        logger.warning('SCHEDULE_CHAT_ID не налаштовано, пропускаю розклад')
+    target_chat: str | None = TELEGRAM_CHAT_ID
+    if not target_chat:
+        logger.warning('TELEGRAM_CHAT_ID не налаштовано, пропускаю розклад')
         return None
     source = _build_exchange_source()
     if source is None:
@@ -423,9 +420,9 @@ def build_schedule_publisher(sender: TelegramSender) -> SchedulePublisher | None
 
     chat_id: int | str
     try:
-        chat_id = int(SCHEDULE_CHAT_ID)
+        chat_id = int(target_chat)
     except (ValueError, TypeError):
-        chat_id = SCHEDULE_CHAT_ID
+        chat_id = target_chat
 
     weekday = SCHEDULE_SEND_WEEKDAY % 7
     send_time = time(hour=SCHEDULE_SEND_HOUR, minute=SCHEDULE_SEND_MINUTE)
@@ -449,12 +446,9 @@ def build_schedule_publisher(sender: TelegramSender) -> SchedulePublisher | None
 
 def build_daily_reminder(sender: TelegramSender) -> DailyReminder | None:
     """Створює щоденне нагадування про завтрашню зміну."""
-    if not SCHEDULE_DAILY_REMINDER_ENABLED:
-        logger.info('Щоденне нагадування вимкнено через SCHEDULE_DAILY_REMINDER_ENABLED')
-        return None
-    target_chat: str | None = SCHEDULE_DAILY_REMINDER_CHAT_ID
+    target_chat: str | None = TELEGRAM_CHAT_ID
     if not target_chat:
-        logger.warning('SCHEDULE_DAILY_REMINDER_CHAT_ID не налаштовано, пропускаю нагадування')
+        logger.warning('TELEGRAM_CHAT_ID не налаштовано, пропускаю нагадування')
         return None
     source = _build_exchange_source()
     if source is None:

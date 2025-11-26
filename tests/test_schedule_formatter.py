@@ -67,6 +67,16 @@ class _DummySender:
         del chat_id, message_id, text, parse_mode, reply_markup, disable_web_page_preview
         raise AssertionError('edit_message_text не повинен викликатися у тесті')
 
+    async def pin_message(  # noqa: D401
+        self,
+        chat_id: int | str,
+        message_id: int,
+        *,
+        disable_notification: bool = True,
+    ) -> None:
+        del chat_id, message_id, disable_notification
+        raise AssertionError('pin_message не повинен викликатися у тесті')
+
 
 @pytest.fixture
 def source_config() -> ExchangeSourceConfig:

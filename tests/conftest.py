@@ -37,6 +37,7 @@ class FakeTelegramSender(TelegramSender):
         self.callback_answers: list[dict[str, object]] = []
         self.edited_markup: list[dict[str, object]] = []
         self.edited_text: list[dict[str, object]] = []
+        self.pinned_messages: list[dict[str, object]] = []
         self._message_counter: int = 1_000
         self.raise_on_edit: list[BaseException] = []
 
@@ -103,6 +104,19 @@ class FakeTelegramSender(TelegramSender):
             'disable_web_page_preview': disable_web_page_preview,
         }
         self.edited_text.append(payload)
+
+    async def pin_message(
+        self,
+        chat_id: int | str,
+        message_id: int,
+        *,
+        disable_notification: bool = True,
+    ) -> None:
+        self.pinned_messages.append({
+            'chat_id': chat_id,
+            'message_id': message_id,
+            'disable_notification': disable_notification,
+        })
 
 
 @pytest.fixture(autouse=True)

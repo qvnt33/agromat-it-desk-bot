@@ -56,8 +56,6 @@
 ### Розклад змін (опційно)
 | Змінна                       | Призначення                                                                 |
 |------------------------------|------------------------------------------------------------------------------|
-| `SCHEDULE_ENABLED`           | `true/false`, вмикає щотижневу розсилку                                      |
-| `SCHEDULE_CHAT_ID`           | чат для повідомлення (за замовчуванням `TELEGRAM_CHAT_ID`)                  |
 | `SCHEDULE_EXCHANGE_EMAIL`    | поштова скринька з календарем змін                                          |
 | `SCHEDULE_EXCHANGE_USERNAME` | логін для EWS (якщо відрізняється від email)                                |
 | `SCHEDULE_EXCHANGE_PASSWORD` | пароль/додаткова парольна фраза                                             |
@@ -66,10 +64,9 @@
 | `SCHEDULE_TIMEZONE`          | назва часової зони (default: `Europe/Kyiv`)                                 |
 | `SCHEDULE_SEND_WEEKDAY`      | день, коли надсилати, `0=Пн ... 6=Нд` (default: `6`)                        |
 | `SCHEDULE_SEND_TIME`         | локальний час у форматі `HH:MM` (default: `09:00`)                          |
-| `SCHEDULE_PIN_WEEKLY`        | `true/false`, автозакріплення щотижневого повідомлення                      |
-| `SCHEDULE_DAILY_REMINDER_ENABLED` | `true/false`, вмикає щоденне нагадування                              |
-| `SCHEDULE_DAILY_REMINDER_CHAT_ID` | чат для нагадування (default: `SCHEDULE_CHAT_ID`)                     |
 | `SCHEDULE_DAILY_REMINDER_TIME`    | час нагадування, `HH:MM` (default: `18:00`)                           |
+
+Розсилки графіка та щоденні нагадування завжди активні й використовують той самий `TELEGRAM_CHAT_ID`, що й основні повідомлення.
 
 ### Швидке розгортання
 1. Скопіюйте `.env.example` у `.env`, заповніть потрібні значення.

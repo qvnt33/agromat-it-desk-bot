@@ -28,9 +28,12 @@ _DEFAULT_ASSIGNEE: str = '[не призначено]'
 _EMAIL_SUMMARY_FALLBACK_PREFIX: str = 'проблема з електронним листом'
 _HTML_COMMENT_RE = re.compile(r'<!--.*?-->', re.DOTALL)
 _STATUS_EMOJI_MAP: dict[str, str] = {
-    'нова': '🟡',
-    'в роботі': '🔵',
+    'нова': '🔵',
+    'в роботі': '🟡',
     'виконано': '🟢',
+}
+_STATUS_EMOJI_ALIASES: dict[str, str] = {
+    'нова': 'в роботі',
 }
 _STATUS_EMOJI_ARCHIVED: str = '⚪'
 _STATUS_EMOJI_DEFAULT: str = '🟤'
@@ -334,7 +337,8 @@ def _pick_status_emoji(status: str | None) -> str:
     archived_token: str = render(Msg.STATUS_ARCHIVED).casefold()
     if normalized == archived_token:
         return _STATUS_EMOJI_ARCHIVED
-    return _STATUS_EMOJI_MAP.get(normalized, _STATUS_EMOJI_DEFAULT)
+    alias_target: str = _STATUS_EMOJI_ALIASES.get(normalized, normalized)
+    return _STATUS_EMOJI_MAP.get(alias_target, _STATUS_EMOJI_DEFAULT)
 
 
 def resolve_from_map(tg_user_id: int | None) -> tuple[str | None, str | None, str | None]:
