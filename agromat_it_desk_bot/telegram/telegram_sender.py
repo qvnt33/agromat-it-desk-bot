@@ -30,6 +30,7 @@ class TelegramSender(Protocol):
         parse_mode: str | None = 'HTML',
         reply_markup: dict[str, Any] | None = None,
         disable_web_page_preview: bool = True,
+        reply_to_message_id: int | None = None,
     ) -> int: ...
 
     async def delete_message(self, chat_id: int | str, message_id: int) -> None: ...
@@ -91,6 +92,7 @@ class AiogramTelegramSender:
         parse_mode: str | None = 'HTML',
         reply_markup: dict[str, Any] | None = None,
         disable_web_page_preview: bool = True,
+        reply_to_message_id: int | None = None,
     ) -> int:
         message = await self._request_with_retry(
             self._bot.send_message,
@@ -99,6 +101,7 @@ class AiogramTelegramSender:
             parse_mode=parse_mode,
             reply_markup=reply_markup,
             disable_web_page_preview=disable_web_page_preview,
+            reply_to_message_id=reply_to_message_id,
             request_timeout=self._request_timeout,
         )
         return int(message.message_id)

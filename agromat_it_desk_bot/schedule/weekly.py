@@ -99,8 +99,18 @@ class ExchangeScheduleClient:
                 credentials=credentials,
                 version=Version(build=Build(major_version=15, minor_version=0)),
             )
-        service_account = self._build_account(self._source.email, credentials, config_obj)
-        folder = self._resolve_calendar(service_account, credentials, config_obj)
+        try:
+            service_account = self._build_account(self._source.email, credentials, config_obj)
+            folder = self._resolve_calendar(service_account, credentials, config_obj)
+        except Exception as exc:  # noqa: BLE001
+            if _is_exchange_auth_error(exc):
+                logger.error('Невірний логін або пароль для Exchange під час fetch_range '
+                             '(email=%s username=%s server=%s): %s',
+                             self._source.email,
+                             self._source.username,
+                             self._source.server or '<autodiscover>',
+                             exc)
+            return []
         items = folder.view(start=start, end=end).order_by('start').only('subject', 'start', 'end', 'categories')
         shifts: list[ShiftEntry] = []
         for item in items:
@@ -126,20 +136,26 @@ class ExchangeScheduleClient:
     ) -> Any:  # noqa: ANN401
         from exchangelib import DELEGATE, Account
 
-        if config is not None:
+        try:
+            if config is not None:
+                return Account(
+                    primary_smtp_address=email,
+                    config=config,
+                    credentials=credentials,
+                    autodiscover=False,
+                    access_type=DELEGATE,
+                )
             return Account(
                 primary_smtp_address=email,
-                config=config,
                 credentials=credentials,
-                autodiscover=False,
+                autodiscover=True,
                 access_type=DELEGATE,
             )
-        return Account(
-            primary_smtp_address=email,
-            credentials=credentials,
-            autodiscover=True,
-            access_type=DELEGATE,
-        )
+        except Exception as exc:  # noqa: BLE001
+            if _is_exchange_auth_error(exc):
+                username: str = getattr(credentials, 'username', '<unknown>')
+                logger.error('Невірні облікові дані пошти (email=%s, username=%s): %s', email, username, exc)
+            raise
 
     def _resolve_calendar(self, account: Any, credentials: Any, config: Any | None) -> Any:  # noqa: ANN401
         """Знаходить загальний календар за назвою через resolve_names або повертає власний."""
@@ -341,6 +357,8 @@ class DailyReminder:
             shifts = await asyncio.to_thread(self._client.fetch_range, start, end)
         except Exception as exc:  # noqa: BLE001
             logger.exception('Не вдалося отримати розклад для нагадування: %s', exc)
+            next_try = self._next_trigger()
+            logger.info('Щоденне нагадування оновиться повторно о %s', next_try.isoformat())
             return
         message = self._format_message(target_date, shifts)
         try:
@@ -484,3 +502,18 @@ def _build_exchange_source() -> ExchangeSourceConfig | None:
         calendar_name=SCHEDULE_CALENDAR_NAME,
         timezone=SCHEDULE_TIMEZONE,
     )
+
+
+def _is_exchange_auth_error(exc: Exception) -> bool:
+    """Повертає True, якщо помилка пов'язана з невірним логіном/паролем пошти."""
+    try:
+        from exchangelib.errors import ErrorInvalidUserCredentials, UnauthorizedError
+    except Exception:  # noqa: BLE001
+        message = str(exc).lower()
+        return 'invalid credentials' in message or 'unauthorized' in message
+    return isinstance(exc, (ErrorInvalidUserCredentials, UnauthorizedError))
+
+
+def _sanitize_alert_text(text: str) -> str:
+    """Перетворює `br` на перенос рядка для підтримки parse_mode=HTML."""
+    return text.replace('<br/>', '\n').replace('<br>', '\n')

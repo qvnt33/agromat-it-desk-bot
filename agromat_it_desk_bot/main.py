@@ -16,6 +16,11 @@ from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramBadRequest
 from fastapi import FastAPI, HTTPException, Request
 
+from agromat_it_desk_bot.alerts.new_status import (
+    build_new_status_alert_worker,
+    cancel_new_status_alerts,
+    schedule_new_status_alerts,
+)
 from agromat_it_desk_bot.callback_handlers import verify_telegram_secret
 from agromat_it_desk_bot.config import BOT_TOKEN, TELEGRAM_CHAT_ID, YT_BASE_URL, YT_WEBHOOK_SECRET
 from agromat_it_desk_bot.messages import Msg, render
@@ -295,10 +300,15 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     daily_reminder: DailyReminder | None = build_daily_reminder(sender)
     if daily_reminder is not None:
         daily_reminder.start()
+    status_alert_worker = build_new_status_alert_worker(sender)
+    if status_alert_worker is not None:
+        status_alert_worker.start()
 
     try:
         yield
     finally:
+        if status_alert_worker is not None:
+            await status_alert_worker.stop()
         if daily_reminder is not None:
             await daily_reminder.stop()
         if schedule_publisher is not None:
@@ -377,6 +387,7 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:  # noqa: C901
         disable_web_page_preview=False,
     )
     await asyncio.to_thread(upsert_issue_message, issue_id, _TELEGRAM_CHAT_ID_RESOLVED, message_id)
+    await schedule_new_status_alerts(issue_id, status_text, _TELEGRAM_CHAT_ID_RESOLVED, message_id)
     return {'ok': True}
 
 
@@ -445,6 +456,7 @@ async def youtrack_update(request: Request) -> dict[str, bool]:  # noqa: C901
     status_text: str | None = status_payload or (details.status if details else None)
     assignee_text: str | None = assignee_payload or (details.assignee if details else None)
     url_val: str = get_str(issue_mapping, 'url') or _build_issue_url(issue_id)
+    await cancel_new_status_alerts(issue_id, status_text)
 
     payload_for_logging = _prepare_payload_for_logging(payload)
     logger.debug('Параметри update вебхука: %s', payload_for_logging)

@@ -49,6 +49,7 @@ class FakeTelegramSender(TelegramSender):
         parse_mode: str | None = 'HTML',
         reply_markup: dict[str, object] | None = None,
         disable_web_page_preview: bool = True,
+        reply_to_message_id: int | None = None,
     ) -> int:
         message_id: int = self._message_counter
         self._message_counter += 1
@@ -59,6 +60,7 @@ class FakeTelegramSender(TelegramSender):
             'reply_markup': reply_markup,
             'disable_web_page_preview': disable_web_page_preview,
             'message_id': message_id,
+            'reply_to_message_id': reply_to_message_id,
         })
         return message_id
 

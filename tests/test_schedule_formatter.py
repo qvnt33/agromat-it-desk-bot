@@ -27,8 +27,9 @@ class _DummySender:
         parse_mode: str | None = 'HTML',
         reply_markup: dict[str, Any] | None = None,
         disable_web_page_preview: bool = True,
+        reply_to_message_id: int | None = None,
     ) -> int:
-        del chat_id, text, parse_mode, reply_markup, disable_web_page_preview
+        del chat_id, text, parse_mode, reply_markup, disable_web_page_preview, reply_to_message_id
         raise AssertionError('send_message не повинен викликатися у тесті')
 
     async def delete_message(self, chat_id: int | str, message_id: int) -> None:  # noqa: D401

@@ -1,6 +1,7 @@
 """Налаштування сервісу: зчитування змінних середовища."""
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import find_dotenv, load_dotenv
@@ -63,9 +64,6 @@ YT_WEBHOOK_SECRET: str | None = os.getenv('YT_WEBHOOK_SECRET')
 # Задають параметри доступу до YouTrack API
 YT_TOKEN: str | None = os.getenv('YT_TOKEN')
 
-USER_MAP_PATH: str = os.getenv('USER_MAP_PATH', './user_map.json')
-USER_MAP_FILE: Path = Path(USER_MAP_PATH)
-
 PROJECT_KEY: str | None = os.getenv('YT_PROJECT_KEY')
 PROJECT_ID: str | None = os.getenv('YT_PROJECT_ID')
 
@@ -121,3 +119,56 @@ SCHEDULE_SEND_MINUTE: int = _SCHEDULE_MINUTE
 _REMINDER_HOUR, _REMINDER_MINUTE = _env_time(os.getenv('SCHEDULE_DAILY_REMINDER_TIME'), fallback=(18, 0))
 SCHEDULE_DAILY_REMINDER_HOUR: int = _REMINDER_HOUR
 SCHEDULE_DAILY_REMINDER_MINUTE: int = _REMINDER_MINUTE
+
+
+@dataclass(frozen=True)
+class StatusAlertStep:
+    """Описує відкладене повідомлення про статус ``Нова``."""
+
+    index: int
+    minutes: int
+    message: str
+
+
+def _load_alert_minutes() -> tuple[int, ...]:
+    defaults: tuple[int, int, int] = (20, 60, 120)
+    values: list[int] = []
+    for position, default in enumerate(defaults, start=1):
+        env_name = f'NEW_STATUS_ALERT_MINUTES_{position}'
+        values.append(_env_int(os.getenv(env_name), default=default))
+    return tuple(values)
+
+
+def _load_alert_messages() -> tuple[str, ...]:
+    defaults: tuple[str, str, str] = (
+        '⚠️ Нова заявка очікує на реакцію понад 20 хвилин.',
+        '⚠️ Нова заявка очікує понад 1 годину.',
+        '⚠️ Нова заявка очікує понад 2 години.',
+    )
+    messages: list[str] = []
+    for position, default in enumerate(defaults, start=1):
+        env_name = f'NEW_STATUS_ALERT_MESSAGE_{position}'
+        text = (os.getenv(env_name) or default).strip()
+        messages.append(text or default)
+    return tuple(messages)
+
+
+def _build_alert_steps(minutes: tuple[int, ...], messages: tuple[str, ...]) -> tuple[StatusAlertStep, ...]:
+    steps: list[StatusAlertStep] = []
+    count: int = min(len(minutes), len(messages))
+    for offset in range(count):
+        minute_value: int = minutes[offset]
+        if minute_value <= 0:
+            continue
+        steps.append(StatusAlertStep(index=offset + 1, minutes=minute_value, message=messages[offset]))
+    return tuple(steps)
+
+
+NEW_STATUS_ALERT_ENABLED: bool = _env_bool(os.getenv('NEW_STATUS_ALERT_ENABLED'))
+NEW_STATUS_ALERT_STATE_NAME: str = os.getenv('NEW_STATUS_STATE_NAME', 'Нова').strip() or 'Нова'
+NEW_STATUS_ALERT_STEPS: tuple[StatusAlertStep, ...] = _build_alert_steps(
+    _load_alert_minutes(),
+    _load_alert_messages(),
+)
+_ALERT_POLL_MINUTES: int = max(_env_int(os.getenv('NEW_STATUS_ALERT_POLL_MINUTES'), default=1), 1)
+NEW_STATUS_ALERT_POLL_SECONDS: int = _ALERT_POLL_MINUTES * 60

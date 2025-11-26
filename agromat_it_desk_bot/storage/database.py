@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,6 +36,16 @@ class UserRecord(TypedDict, total=False):
     registered_at: str | None
     created_at: str
     updated_at: str
+
+
+class IssueAlertRecord(TypedDict):
+    """Описує нагадування для задачі в статусі ``Нова``."""
+
+    issue_id: str
+    alert_index: int
+    chat_id: str
+    message_id: int
+    send_after: str
 
 
 def migrate() -> None:
@@ -72,6 +82,25 @@ def migrate() -> None:
                 message_id INTEGER NOT NULL,
                 updated_at TEXT NOT NULL
             )
+            """,
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS issue_alerts (
+                issue_id TEXT NOT NULL,
+                alert_index INTEGER NOT NULL,
+                chat_id TEXT NOT NULL,
+                message_id INTEGER NOT NULL,
+                send_after TEXT NOT NULL,
+                sent_at TEXT,
+                PRIMARY KEY(issue_id, alert_index)
+            )
+            """,
+        )
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_issue_alerts_due
+            ON issue_alerts(send_after)
             """,
         )
         connection.commit()
@@ -441,6 +470,109 @@ def fetch_issue_message(issue_id: str) -> dict[str, str | int] | None:
             'message_id': int(row['message_id']),
             'updated_at': str(row['updated_at']),
         }
+
+
+def upsert_issue_alerts(
+    issue_id: str,
+    chat_id: int | str,
+    message_id: int,
+    alerts: Sequence[tuple[int, str]],
+) -> None:
+    """Зберігає графік сповіщень про статус ``Нова``."""
+    if not alerts:
+        clear_issue_alerts(issue_id)
+        return
+    chat_value: str = str(chat_id)
+    with _connect() as connection:
+        cursor = connection.cursor()
+        _ensure_issue_alerts_table(cursor)
+        cursor.execute('DELETE FROM issue_alerts WHERE issue_id = ?', (issue_id,))
+        cursor.executemany(
+            """
+            INSERT INTO issue_alerts(issue_id, alert_index, chat_id, message_id, send_after, sent_at)
+            VALUES(?, ?, ?, ?, ?, NULL)
+            """,
+            [(issue_id, index, chat_value, message_id, send_after) for index, send_after in alerts],
+        )
+        connection.commit()
+
+
+def clear_issue_alerts(issue_id: str) -> None:
+    """Видаляє всі нагадування для задачі."""
+    with _connect() as connection:
+        cursor = connection.cursor()
+        _ensure_issue_alerts_table(cursor)
+        cursor.execute('DELETE FROM issue_alerts WHERE issue_id = ?', (issue_id,))
+        connection.commit()
+
+
+def fetch_due_issue_alerts(limit: int, upper_bound_iso: str) -> list[IssueAlertRecord]:
+    """Повертає нагадування, час яких настав."""
+    with _connect() as connection:
+        cursor = connection.cursor()
+        _ensure_issue_alerts_table(cursor)
+        cursor.execute(
+            """
+            SELECT issue_id, alert_index, chat_id, message_id, send_after
+            FROM issue_alerts
+            WHERE sent_at IS NULL
+                AND send_after <= ?
+            ORDER BY send_after ASC
+            LIMIT ?
+            """,
+            (upper_bound_iso, limit),
+        )
+        rows: list[sqlite3.Row] = cursor.fetchall()
+        records: list[IssueAlertRecord] = []
+        for row in rows:
+            records.append({
+                'issue_id': str(row['issue_id']),
+                'alert_index': int(row['alert_index']),
+                'chat_id': str(row['chat_id']),
+                'message_id': int(row['message_id']),
+                'send_after': str(row['send_after']),
+            })
+        return records
+
+
+def mark_issue_alert_sent(issue_id: str, alert_index: int) -> None:
+    """Позначає нагадування як надіслане."""
+    with _connect() as connection:
+        cursor = connection.cursor()
+        _ensure_issue_alerts_table(cursor)
+        cursor.execute(
+            """
+            UPDATE issue_alerts
+            SET sent_at = ?
+            WHERE issue_id = ?
+                AND alert_index = ?
+            """,
+            (_utcnow(), issue_id, alert_index),
+        )
+        connection.commit()
+
+
+def _ensure_issue_alerts_table(cursor: sqlite3.Cursor) -> None:
+    """Гарантує наявність таблиці issue_alerts."""
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS issue_alerts (
+            issue_id TEXT NOT NULL,
+            alert_index INTEGER NOT NULL,
+            chat_id TEXT NOT NULL,
+            message_id INTEGER NOT NULL,
+            send_after TEXT NOT NULL,
+            sent_at TEXT,
+            PRIMARY KEY(issue_id, alert_index)
+        )
+        """,
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_issue_alerts_due
+        ON issue_alerts(send_after)
+        """,
+    )
 
 
 def touch_last_seen(tg_user_id: int) -> None:

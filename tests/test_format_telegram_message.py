@@ -20,9 +20,9 @@ def _build_message(status: str | None) -> str:
 
 
 def test_format_message_sets_known_status_emoji() -> None:
-    """Статус 'Нова' має додавати жовтий індикатор."""
+    """Статус 'Нова' має додавати синій індикатор."""
     message: str = _build_message('Нова')
-    assert message.startswith('🟡 ')
+    assert message.startswith('🔵 ')
 
 
 def test_format_message_falls_back_to_default_emoji() -> None:
