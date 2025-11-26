@@ -25,6 +25,15 @@ def _env_int(value: str | None, *, default: int) -> int:
         return default
 
 
+def _env_float(value: str | None, *, default: float) -> float:
+    if value is None:
+        return default
+    try:
+        return float(value.strip())
+    except ValueError:
+        return default
+
+
 def _env_time(value: str | None, *, fallback: tuple[int, int]) -> tuple[int, int]:
     if value is None:
         return fallback
@@ -172,3 +181,8 @@ NEW_STATUS_ALERT_STEPS: tuple[StatusAlertStep, ...] = _build_alert_steps(
 )
 _ALERT_POLL_MINUTES: int = max(_env_int(os.getenv('NEW_STATUS_ALERT_POLL_MINUTES'), default=1), 1)
 NEW_STATUS_ALERT_POLL_SECONDS: int = _ALERT_POLL_MINUTES * 60
+
+_ARCHIVE_SCAN_MINUTES: float = max(_env_float(os.getenv('ARCHIVE_SCAN_INTERVAL_MINUTES'), default=10.0), 0.1)
+ARCHIVE_SCAN_INTERVAL_SECONDS: float = _ARCHIVE_SCAN_MINUTES * 60
+_ARCHIVE_IDLE_MINUTES: float = max(_env_float(os.getenv('ARCHIVE_IDLE_THRESHOLD_MINUTES'), default=2880.0), 0.1)
+ARCHIVE_IDLE_THRESHOLD_SECONDS: float = _ARCHIVE_IDLE_MINUTES * 60

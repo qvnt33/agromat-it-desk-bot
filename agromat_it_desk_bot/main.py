@@ -16,6 +16,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramBadRequest
 from fastapi import FastAPI, HTTPException, Request
 
+from agromat_it_desk_bot.alerts.archiver import IssueArchiverWorker
 from agromat_it_desk_bot.alerts.new_status import (
     build_new_status_alert_worker,
     cancel_new_status_alerts,
@@ -303,10 +304,14 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     status_alert_worker = build_new_status_alert_worker(sender)
     if status_alert_worker is not None:
         status_alert_worker.start()
+    issue_archiver = IssueArchiverWorker(sender)
+    issue_archiver.start()
 
     try:
         yield
     finally:
+        if issue_archiver is not None:
+            await issue_archiver.stop()
         if status_alert_worker is not None:
             await status_alert_worker.stop()
         if daily_reminder is not None:

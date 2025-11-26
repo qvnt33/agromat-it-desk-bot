@@ -48,6 +48,15 @@ class IssueAlertRecord(TypedDict):
     send_after: str
 
 
+class IssueMessageRecord(TypedDict):
+    """Описує Telegram-повідомлення, пов'язане із заявкою."""
+
+    issue_id: str
+    chat_id: str
+    message_id: int
+    updated_at: str
+
+
 def migrate() -> None:
     """Створює таблицю ``users`` у БД, якщо вона ще не існує."""
     path: Path = DATABASE_PATH
@@ -80,7 +89,8 @@ def migrate() -> None:
                 issue_id TEXT PRIMARY KEY,
                 chat_id TEXT NOT NULL,
                 message_id INTEGER NOT NULL,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                archived INTEGER NOT NULL DEFAULT 0
             )
             """,
         )
@@ -105,6 +115,7 @@ def migrate() -> None:
         )
         connection.commit()
         _ensure_columns(connection)
+        _ensure_issue_message_columns(connection)
         _backfill_registered_at(connection)
         _ensure_unique_index(connection)
 
@@ -121,6 +132,19 @@ def _ensure_columns(connection: sqlite3.Connection) -> None:
         cursor.execute('ALTER TABLE users ADD COLUMN updated_at TEXT')
     if 'token_encrypted' not in columns:
         cursor.execute('ALTER TABLE users ADD COLUMN token_encrypted TEXT')
+    connection.commit()
+
+
+def _ensure_issue_message_columns(connection: sqlite3.Connection) -> None:
+    """Гарантує наявність поля archived у таблиці issue_messages."""
+    cursor = connection.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='issue_messages'")
+    if cursor.fetchone() is None:
+        return
+    cursor.execute('PRAGMA table_info(issue_messages)')
+    columns: set[str] = {str(row['name']) for row in cursor.fetchall()}
+    if 'archived' not in columns:
+        cursor.execute('ALTER TABLE issue_messages ADD COLUMN archived INTEGER NOT NULL DEFAULT 0')
     connection.commit()
 
 
@@ -425,24 +449,27 @@ def upsert_issue_message(issue_id: str, chat_id: int | str, message_id: int) -> 
     chat_value: str = str(chat_id)
     with _connect() as connection:
         cursor = connection.cursor()
+        _ensure_issue_message_columns(connection)
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS issue_messages (
                 issue_id TEXT PRIMARY KEY,
                 chat_id TEXT NOT NULL,
                 message_id INTEGER NOT NULL,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                archived INTEGER NOT NULL DEFAULT 0
             )
             """,
         )
         cursor.execute(
             """
-            INSERT INTO issue_messages(issue_id, chat_id, message_id, updated_at)
-            VALUES(?, ?, ?, ?)
+            INSERT INTO issue_messages(issue_id, chat_id, message_id, updated_at, archived)
+            VALUES(?, ?, ?, ?, 0)
             ON CONFLICT(issue_id) DO UPDATE SET
                 chat_id = excluded.chat_id,
                 message_id = excluded.message_id,
-                updated_at = excluded.updated_at
+                updated_at = excluded.updated_at,
+                archived = 0
             """,
             (issue_id, chat_value, message_id, now),
         )
@@ -453,6 +480,7 @@ def fetch_issue_message(issue_id: str) -> dict[str, str | int] | None:
     """Повертає інформацію про повідомлення Telegram для задачі."""
     with _connect() as connection:
         cursor = connection.cursor()
+        _ensure_issue_message_columns(connection)
         cursor.execute(
             """
             SELECT issue_id, chat_id, message_id, updated_at
@@ -470,6 +498,32 @@ def fetch_issue_message(issue_id: str) -> dict[str, str | int] | None:
             'message_id': int(row['message_id']),
             'updated_at': str(row['updated_at']),
         }
+
+
+def fetch_stale_issue_messages(older_than_iso: str) -> list[IssueMessageRecord]:
+    """Повертає повідомлення, які потребують архівації."""
+    with _connect() as connection:
+        cursor = connection.cursor()
+        _ensure_issue_message_columns(connection)
+        cursor.execute(
+            """
+            SELECT issue_id, chat_id, message_id, updated_at
+            FROM issue_messages
+            WHERE archived = 0
+              AND updated_at <= ?
+            """,
+            (older_than_iso,),
+        )
+        rows: list[sqlite3.Row] = cursor.fetchall()
+        return [
+            IssueMessageRecord(
+                issue_id=str(row['issue_id']),
+                chat_id=str(row['chat_id']),
+                message_id=int(row['message_id']),
+                updated_at=str(row['updated_at']),
+            )
+            for row in rows
+        ]
 
 
 def upsert_issue_alerts(
@@ -548,6 +602,24 @@ def mark_issue_alert_sent(issue_id: str, alert_index: int) -> None:
                 AND alert_index = ?
             """,
             (_utcnow(), issue_id, alert_index),
+        )
+        connection.commit()
+
+
+def mark_issue_archived(issue_id: str) -> None:
+    """Позначає повідомлення як архівоване."""
+    now: str = _utcnow()
+    with _connect() as connection:
+        cursor = connection.cursor()
+        _ensure_issue_message_columns(connection)
+        cursor.execute(
+            """
+            UPDATE issue_messages
+            SET archived = 1,
+                updated_at = ?
+            WHERE issue_id = ?
+            """,
+            (now, issue_id),
         )
         connection.commit()
 
