@@ -1,4 +1,4 @@
-"""Отримує розклад змін з Exchange та надсилає його в Telegram."""
+"""Fetches duty schedule from Exchange and sends it to Telegram."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ _WEEKDAY_LABELS: tuple[str, ...] = ('Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'С�
 
 @dataclass(frozen=True)
 class ExchangeSourceConfig:
-    """Налаштування підключення до Exchange/Outlook."""
+    """Connection settings for Exchange/Outlook."""
 
     email: str
     username: str
@@ -46,7 +46,7 @@ class ExchangeSourceConfig:
 
 @dataclass(frozen=True)
 class ScheduleConfig:
-    """Параметри побудови тижневого розкладу."""
+    """Parameters for building a weekly schedule."""
 
     chat_id: int | str
     source: ExchangeSourceConfig
@@ -57,7 +57,7 @@ class ScheduleConfig:
 
 @dataclass(frozen=True)
 class ReminderConfig:
-    """Параметри щоденного нагадування."""
+    """Parameters for daily reminder."""
 
     chat_id: int | str
     source: ExchangeSourceConfig
@@ -66,7 +66,7 @@ class ReminderConfig:
 
 @dataclass(frozen=True)
 class ShiftEntry:
-    """Описує одну зміну у календарі."""
+    """Describes a single calendar shift."""
 
     subject: str
     start: datetime
@@ -75,17 +75,17 @@ class ShiftEntry:
 
 
 class ExchangeScheduleClient:
-    """Ініціює запити до Exchange/Outlook та повертає список змін."""
+    """Performs Exchange/Outlook requests and returns shift list."""
 
     def __init__(self, source: ExchangeSourceConfig) -> None:
         self._source = source
 
     def fetch_week(self, start: datetime, end: datetime) -> list[ShiftEntry]:
-        """Повертає зміни у вказаному діапазоні."""
+        """Returns shifts within the given range."""
         return self.fetch_range(start, end)
 
     def fetch_range(self, start: datetime, end: datetime) -> list[ShiftEntry]:
-        """Зчитує події календаря у довільному діапазоні."""
+        """Reads calendar events in an arbitrary range."""
         try:
             from exchangelib import Build, Configuration, Credentials, Version
         except ImportError as exc:  # pragma: no cover
@@ -158,14 +158,14 @@ class ExchangeScheduleClient:
             raise
 
     def _resolve_calendar(self, account: Any, credentials: Any, config: Any | None) -> Any:  # noqa: ANN401
-        """Знаходить загальний календар за назвою через resolve_names або повертає власний."""
+        """Finds a shared calendar by name via resolve_names or returns own."""
         folder = account.calendar
         if not self._source.calendar_name:
             return folder
 
         candidate_name: str = self._source.calendar_name.strip()
         try:
-            # resolve_names може повертати генератор – одразу перетворюємо в list
+            # resolve_names may return a generator – immediately cast to list
             matches = list(account.protocol.resolve_names([candidate_name]))
         except Exception as exc:  # noqa: BLE001
             logger.warning('Не вдалося знайти календар %s: %s', candidate_name, exc)
@@ -194,7 +194,7 @@ class ExchangeScheduleClient:
 
 
 class SchedulePublisher:
-    """Запускає фонового робота, що надсилає графік змін раз на тиждень."""
+    """Runs background worker to send weekly schedule."""
 
     def __init__(self, sender: TelegramSender, config: ScheduleConfig) -> None:
         self._sender = sender
@@ -205,12 +205,12 @@ class SchedulePublisher:
         self._tz = ZoneInfo(config.source.timezone)
 
     def start(self) -> None:
-        """Створює асинхронний таск для відправки розкладу."""
+        """Starts async task for schedule delivery."""
         if self._task is None:
             self._task = asyncio.create_task(self._run())
 
     async def stop(self) -> None:
-        """Зупиняє таск та чекає завершення."""
+        """Stops task and waits for completion."""
         self._stop_event.set()
         if self._task is not None:
             await self._task
@@ -312,7 +312,7 @@ class SchedulePublisher:
 
 
 class DailyReminder:
-    """Надсилає нагадування про завтрашню зміну у вказаний час."""
+    """Sends reminder about tomorrow's shift at configured time."""
 
     def __init__(self, sender: TelegramSender, config: ReminderConfig) -> None:
         self._sender = sender
@@ -389,7 +389,7 @@ def _format_subject(name: str | None, _categories: Sequence[str]) -> str:
 
 
 def build_schedule_publisher(sender: TelegramSender) -> SchedulePublisher | None:
-    """Створює публікатор розкладу, якщо ввімкнено відповідні налаштування."""
+    """Builds schedule publisher if settings allow it."""
     target_chat: str | None = TELEGRAM_CHAT_ID
     if not target_chat:
         logger.warning('TELEGRAM_CHAT_ID не налаштовано, пропускаю розклад')
@@ -425,7 +425,7 @@ def build_schedule_publisher(sender: TelegramSender) -> SchedulePublisher | None
 
 
 def build_daily_reminder(sender: TelegramSender) -> DailyReminder | None:
-    """Створює щоденне нагадування про завтрашню зміну."""
+    """Builds daily reminder about tomorrow's shift."""
     target_chat: str | None = TELEGRAM_CHAT_ID
     if not target_chat:
         logger.warning('TELEGRAM_CHAT_ID не налаштовано, пропускаю нагадування')
@@ -467,7 +467,7 @@ def _build_exchange_source() -> ExchangeSourceConfig | None:
 
 
 def _is_exchange_auth_error(exc: Exception) -> bool:
-    """Повертає True, якщо помилка пов'язана з невірним логіном/паролем пошти."""
+    """Returns True if error is caused by invalid mail login/password."""
     try:
         from exchangelib.errors import ErrorInvalidUserCredentials, UnauthorizedError
     except Exception:  # noqa: BLE001

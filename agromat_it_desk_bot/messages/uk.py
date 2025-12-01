@@ -6,9 +6,9 @@ from collections.abc import Mapping
 
 from .keys import Msg
 
-# Зберігають сталі текстові шаблони для локалі ``uk``
+# Static text templates for ``uk`` locale
 UK: Mapping[Msg, str] = {
-    # Інформаційні повідомлення
+    # Informational messages
     Msg.NOT_ASSIGNED: '[не призначено]',
     Msg.CALLBACK_ACCEPTED: 'Прийнято ✅',
     Msg.TG_BTN_ACCEPT_ISSUE: 'Прийняти',
@@ -64,7 +64,7 @@ UK: Mapping[Msg, str] = {
         '🔓 Доступ відʼєднано. Щоб повернути – виконай /connect <code>&lt;новий токен&gt;</code> знову.'
     ),
 
-    # Помилки та попередження
+    # Errors and warnings
     Msg.ERR_TG_ID_UNAVAILABLE: 'Не вдалося визначити Ваш Telegram ID. Спробуйте пізніше.',
     Msg.ERR_LOGIN_TAKEN: 'Цей логін вже закріплено за іншим користувачем.',
     Msg.ERR_CONFIRM_MISMATCH: 'Очікується підтвердження для логіна {expected}, а не {actual}.',

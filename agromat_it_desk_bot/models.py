@@ -1,4 +1,4 @@
-"""Містить pydantic-моделі для вхідних webhook-пейлоадів YouTrack."""
+"""Contains pydantic models for incoming YouTrack webhook payloads."""
 
 from __future__ import annotations
 
@@ -9,20 +9,20 @@ from pydantic import BaseModel, ConfigDict
 
 
 class IssuePayload(BaseModel):
-    """Описує основні поля задачі, що надходять у webhook.
+    """Describes core issue fields received in a webhook.
 
-    :param idReadable: Людиночитний ID задачі.
-    :param id: Внутрішній ID задачі.
-    :param summary: Заголовок задачі.
-    :param description: Опис задачі.
-    :param status: Значення статусу з webhook.
-    :param state: Альтернативне поле статусу.
-    :param assignee: Виконавець задачі.
-    :param author: Автор задачі.
-    :param reporter: Репортер задачі.
-    :param createdBy: Створювач задачі.
-    :param customFields: Кастомні поля у форматі YouTrack.
-    :param url: Посилання на задачу.
+    :param idReadable: Human-readable issue ID.
+    :param id: Internal issue ID.
+    :param summary: Issue title.
+    :param description: Issue description.
+    :param status: Status value from webhook.
+    :param state: Alternate status field.
+    :param assignee: Issue assignee.
+    :param author: Issue author.
+    :param reporter: Issue reporter.
+    :param createdBy: Issue creator.
+    :param customFields: Custom fields in YouTrack format.
+    :param url: Issue link.
     """
 
     model_config = ConfigDict(extra='allow', populate_by_name=True)
@@ -42,9 +42,9 @@ class IssuePayload(BaseModel):
 
 
 class YouTrackWebhookPayload(BaseModel):
-    """Описує базовий webhook-пейлоад від YouTrack.
+    """Describes base webhook payload from YouTrack.
 
-    :param issue: Вкладена задача (якщо є).
+    :param issue: Nested issue if present.
     """
 
     model_config = ConfigDict(extra='allow')
@@ -52,9 +52,9 @@ class YouTrackWebhookPayload(BaseModel):
     issue: IssuePayload | None = None
 
     def issue_mapping(self) -> Mapping[str, object]:
-        """Повертає словникове представлення задачі для подальшої обробки.
+        """Return mapping representation of issue for further processing.
 
-        :returns: Дані задачі як ``Mapping`` без ``None`` полів.
+        :returns: Issue data as ``Mapping`` without ``None`` fields.
         """
         if self.issue is not None:
             return self.issue.model_dump(mode='python', exclude_none=True)
@@ -62,9 +62,9 @@ class YouTrackWebhookPayload(BaseModel):
 
 
 class YouTrackUpdatePayload(YouTrackWebhookPayload):
-    """Описує webhook-пейлоад для оновлення задачі.
+    """Describes webhook payload for issue update.
 
-    :param changes: Список змінених полів у задачі.
+    :param changes: List of changed fields in issue.
     """
 
     changes: list[str] | None = None

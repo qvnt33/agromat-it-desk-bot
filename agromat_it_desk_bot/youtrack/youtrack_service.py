@@ -1,4 +1,4 @@
-"""Забезпечує вищерівневі операції з YouTrack: мапінг користувачів та оновлення стану."""
+"""Provide higher-level YouTrack operations: user mapping and state updates."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 class IssueDetails(NamedTuple):
-    """Описує основну інформацію задачі для оновлення повідомлень."""
+    """Describe core issue info for message updates."""
 
     summary: str
     description: str
@@ -37,10 +37,10 @@ class IssueDetails(NamedTuple):
 
 
 def resolve_account(tg_user_id: int | None) -> tuple[str | None, str | None, str | None]:
-    """Повертає дані авторизованого користувача YouTrack за Telegram ID.
+    """Return authorized YouTrack user data by Telegram ID.
 
-    :param tg_user_id: Telegram ID користувача.
-    :returns: Логін, email та внутрішній ID користувача YouTrack.
+    :param tg_user_id: Telegram user ID.
+    :returns: Login, email and internal YouTrack user ID.
     """
     if tg_user_id is None:
         logger.debug('resolve_account викликано без tg_user_id')
@@ -51,10 +51,10 @@ def resolve_account(tg_user_id: int | None) -> tuple[str | None, str | None, str
 
 
 def fetch_issue_details(issue_id_readable: str) -> IssueDetails | None:
-    """Отримує актуальні дані задачі для оновлення повідомлення Telegram.
+    """Fetch current issue data to update Telegram message.
 
-    :param issue_id_readable: Зовнішній ідентифікатор задачі (``ABC-123``).
-    :returns: ``IssueDetails`` або ``None``, якщо дані недоступні.
+    :param issue_id_readable: External issue ID (``ABC-123``).
+    :returns: ``IssueDetails`` or ``None`` if unavailable.
     """
     issue_internal_id: str | None = get_issue_internal_id(issue_id_readable)
     if issue_internal_id is None:
@@ -84,14 +84,14 @@ def assign_issue(
     user_id: str | None,
     user_token: str | None,
 ) -> bool:
-    """Переводить задачу в стан «в роботі» після підтвердження користувачем.
+    """Move issue to "in progress" after user confirmation.
 
-    :param issue_id_readable: Короткий ID задачі (``ABC-123``).
-    :param login: Логін користувача YouTrack (використовується для журналювання).
-    :param email: Email користувача YouTrack.
-    :param user_id: Внутрішній ID користувача (може бути ``None``).
-    :param user_token: Персональний токен користувача для REST-запиту.
-    :returns: ``True`` якщо статус оновлено.
+    :param issue_id_readable: Short issue ID (``ABC-123``).
+    :param login: YouTrack login (for logging).
+    :param email: YouTrack email.
+    :param user_id: Internal user ID (optional).
+    :param user_token: Personal user token for REST request.
+    :returns: ``True`` if status updated.
     """
     logger.debug('Отримано запит оновлення статусу: issue=%s login=%s email=%s yt_user_id=%s',
                  issue_id_readable,
@@ -117,7 +117,7 @@ def assign_issue(
 
 
 def _pick_field(fields: CustomFieldMap, names: set[str]) -> CustomField | None:
-    """Вибирає перше поле з переданих назв."""
+    """Pick first field from provided names."""
     for name in names:
         field: CustomField | None = fields.get(name.lower())
         if field is not None:
@@ -126,7 +126,7 @@ def _pick_field(fields: CustomFieldMap, names: set[str]) -> CustomField | None:
 
 
 def _ensure_in_progress(issue_id: str, issue_id_readable: str, auth_token: str | None) -> bool:
-    """Встановлює статус задачі у значення «в роботі», якщо налаштовано."""
+    """Set issue status to \"in progress\" if configured."""
     if not auth_token:
         logger.warning('Відсутній персональний токен для оновлення задачі %s', issue_id_readable)
         return False
@@ -174,7 +174,7 @@ def ensure_summary_placeholder(
     normalized_summary: str,
     issue_internal_id: str | None = None,
 ) -> None:
-    """Оновлює summary задачі у YouTrack, якщо потрібно підставити плейсхолдер."""
+    """Update issue summary in YouTrack when placeholder must be applied."""
     placeholder: str = render(Msg.YT_EMAIL_SUBJECT_MISSING)
     if normalized_summary != placeholder:
         return

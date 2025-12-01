@@ -1,4 +1,4 @@
-"""Низькорівневі виклики YouTrack REST API."""
+"""Low-level YouTrack REST API calls."""
 
 from __future__ import annotations
 
@@ -15,12 +15,12 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 def _ensure_mapping(value: object | None) -> Mapping[str, object]:
-    """Повертає словник, якщо значення є dict, інакше порожній словник."""
+    """Return mapping if value is dict, otherwise empty mapping."""
     return value if isinstance(value, dict) else {}
 
 
 def _extract_text(entry: object | None) -> str | None:
-    """Повертає текстове представлення поля YouTrack, якщо воно задане."""
+    """Return textual representation of YouTrack field if present."""
     if isinstance(entry, str):
         return entry
     if isinstance(entry, Mapping):
@@ -31,7 +31,7 @@ def _extract_text(entry: object | None) -> str | None:
 
 
 class CustomField(TypedDict, total=False):
-    """Структура кастомного поля YouTrack."""
+    """Structure of a YouTrack custom field."""
 
     id: str
     name: str
@@ -43,7 +43,7 @@ CustomFieldMap = dict[str, CustomField]
 
 
 class YouTrackUser(TypedDict, total=False):
-    """Перелік корисних полів користувача YouTrack."""
+    """Set of useful YouTrack user fields."""
 
     id: str
     login: str
@@ -51,13 +51,13 @@ class YouTrackUser(TypedDict, total=False):
 
 
 def get_issue_internal_id(issue_id_readable: str) -> str | None:
-    """Повертає внутрішній ID задачі за ``idReadable``.
+    """Return internal issue ID for ``idReadable``.
 
-    :param issue_id_readable: Короткий ідентифікатор задачі (наприклад, ``ABC-123``).
-    :returns: Внутрішній ID, якщо задачу знайдено, інакше ``None``.
+    :param issue_id_readable: Short issue identifier (for example ``ABC-123``).
+    :returns: Internal ID if issue found, otherwise ``None``.
     """
-    headers: dict[str, str] = _base_headers()  # Заголовки запиту до YouTrack
-    # Виконують пошук задачі за коротким ID за допомогою REST API YouTrack
+    headers: dict[str, str] = _base_headers()  # Request headers to YouTrack
+    # Search for issue by readable ID via YouTrack REST API
     response: requests.Response = requests.get(
         f'{YT_BASE_URL}/api/issues',
         params={'query': issue_id_readable, 'fields': 'id,idReadable'},
@@ -70,7 +70,7 @@ def get_issue_internal_id(issue_id_readable: str) -> str | None:
         return None
 
     items: list[dict[str, object]] = cast(list[dict[str, object]], response.json() or [])
-    # Пошук першої задачі з відповідним idReadable
+    # Find first issue matching idReadable
     issue: dict[str, object] | None = next((it for it in items if it.get('idReadable') == issue_id_readable), None)
     if not issue:
         logger.error('Задачу %s не знайдено у YouTrack', issue_id_readable)
@@ -82,14 +82,14 @@ def get_issue_internal_id(issue_id_readable: str) -> str | None:
 
 
 def fetch_issue_custom_fields(issue_internal_id: str, field_names: Iterable[str]) -> CustomFieldMap | None:
-    """Отримує опис кастомних полів задачі.
+    """Fetch custom field descriptions for issue.
 
-    :param issue_internal_id: Внутрішній ID задачі.
-    :param field_names: Назви полів, які необхідно знайти.
-    :returns: Словник ``назва поля -> опис`` або ``None``.
+    :param issue_internal_id: Internal issue ID.
+    :param field_names: Names of fields to find.
+    :returns: Mapping ``field name -> description`` or ``None``.
     """
-    headers: dict[str, str] = _base_headers()
-    # Отримують повний список customFields для подальшої фільтрації
+    headers: dict[str, str] = _base_headers()  # Request headers to YouTrack
+    # Fetch full customFields list for subsequent filtering
     response: requests.Response = requests.get(
         f'{YT_BASE_URL}/api/issues/{issue_internal_id}',
         params={'fields': 'customFields(id,name,projectCustomField(id,field(id,name),bundle(values(id,name))))'},
@@ -108,10 +108,10 @@ def fetch_issue_custom_fields(issue_internal_id: str, field_names: Iterable[str]
     normalized: set[str] = {name.lower() for name in field_names}
     for custom_field in custom_fields:
         project_custom_obj: object | None = custom_field.get('projectCustomField')
-        project_custom: Mapping[str, object] = _ensure_mapping(project_custom_obj)  # Опис поля у проєкті
+        project_custom: Mapping[str, object] = _ensure_mapping(project_custom_obj)  # Field description in project
 
         field_info_obj: object | None = project_custom.get('field')
-        field_info: Mapping[str, object] = _ensure_mapping(field_info_obj)  # Метадані самого поля
+        field_info: Mapping[str, object] = _ensure_mapping(field_info_obj)  # Field metadata
         field_name: object | None = field_info.get('name')
         if isinstance(field_name, str) and field_name.lower() in normalized:
             result[field_name.lower()] = cast(CustomField, custom_field)
@@ -125,13 +125,13 @@ def assign_custom_field(
     payload: dict[str, object],
     auth_token: str | None = None,
 ) -> bool:
-    """Оновлює значення custom field для задачі.
+    """Update custom field value for issue.
 
-    :param issue_internal_id: Внутрішній ID задачі.
-    :param field_id: Ідентифікатор кастомного поля.
-    :param payload: Тіло запиту з новим значенням.
-    :param auth_token: Токен YouTrack, від імені якого виконується запит.
-    :returns: ``True`` у разі успішного оновлення, інакше ``False``.
+    :param issue_internal_id: Internal issue ID.
+    :param field_id: Custom field identifier.
+    :param payload: Request body with new value.
+    :param auth_token: YouTrack token used for request.
+    :returns: ``True`` if updated successfully, otherwise ``False``.
     """
     headers: dict[str, str] = _base_headers(auth_token)
     response: requests.Response = requests.post(
@@ -152,7 +152,7 @@ def assign_custom_field(
 
 
 def find_user(login: str | None, email: str | None) -> YouTrackUser | None:
-    """Повертає опис користувача YouTrack за логіном."""
+    """Return YouTrack user description by login."""
     if not login:
         logger.warning('find_user викликано без логіна (email=%s)', email)
         return None
@@ -182,7 +182,7 @@ def find_user(login: str | None, email: str | None) -> YouTrackUser | None:
 
 
 def find_user_id(login: str | None, email: str | None) -> str | None:
-    """Визначає ID користувача за логіном або email."""
+    """Determine user ID by login or email."""
     user: YouTrackUser | None = find_user(login, email)
     if user is None:
         return None
@@ -192,10 +192,10 @@ def find_user_id(login: str | None, email: str | None) -> str | None:
 
 
 def fetch_issue_overview(issue_internal_id: str) -> Mapping[str, object] | None:
-    """Повертає основні поля задачі разом із кастомними полями.
+    """Return main issue fields along with custom fields.
 
-    :param issue_internal_id: Внутрішній ID задачі YouTrack.
-    :returns: Словник із полями ``summary``, ``description`` та ``customFields``.
+    :param issue_internal_id: Internal YouTrack issue ID.
+    :returns: Dict with ``summary``, ``description`` and ``customFields``.
     """
     headers: dict[str, str] = _base_headers()
     response: requests.Response = requests.get(
@@ -224,7 +224,7 @@ def fetch_issue_overview(issue_internal_id: str) -> Mapping[str, object] | None:
 
 
 def _search_users(query: str) -> list[dict[str, object]] | None:
-    """Виконує пошук користувачів у YouTrack за довільним запитом."""
+    """Perform user search in YouTrack by arbitrary query."""
     headers: dict[str, str] = _base_headers()  # Заголовки запиту до YouTrack
     users_endpoint: str = f'{YT_BASE_URL}/api/users'
     response: requests.Response = requests.get(
@@ -242,7 +242,7 @@ def _search_users(query: str) -> list[dict[str, object]] | None:
 
 
 def _map_user(candidate: Mapping[str, object]) -> YouTrackUser | None:
-    """Приводить запис користувача до ``YouTrackUser``."""
+    """Normalize user record to ``YouTrackUser``."""
     result: YouTrackUser = {}
 
     id_val: object | None = candidate.get('id')
@@ -261,17 +261,17 @@ def _map_user(candidate: Mapping[str, object]) -> YouTrackUser | None:
 
 
 def find_state_value_id(field_data: CustomField, desired_state: str) -> str | None:
-    """Знаходить ідентифікатор значення стану у бандлі кастомного поля.
+    """Find state value identifier inside custom field bundle.
 
     :param field_data: Опис кастомного поля, отриманий із YouTrack.
     :param desired_state: Назва стану, яке шукають.
     :returns: Ідентифікатор значення стану або ``None``.
     """
     project_custom_obj: object | None = field_data.get('projectCustomField')
-    project_custom: Mapping[str, object] = _ensure_mapping(project_custom_obj)  # Налаштування поля стану
+    project_custom: Mapping[str, object] = _ensure_mapping(project_custom_obj)  # State field configuration
 
     bundle_obj: object | None = project_custom.get('bundle')
-    bundle: Mapping[str, object] = _ensure_mapping(bundle_obj)  # Бандл зі значеннями стану
+    bundle: Mapping[str, object] = _ensure_mapping(bundle_obj)  # Bundle with state values
     values: list[dict[str, object]] = cast(list[dict[str, object]], bundle.get('values') or [])
     desired_normalized: str = desired_state.strip().casefold()
 
@@ -288,7 +288,7 @@ def find_state_value_id(field_data: CustomField, desired_state: str) -> str | No
 
 
 def _base_headers(token_override: str | None = None) -> dict[str, str]:
-    """Повертає стандартні заголовки для викликів YouTrack API."""
+    """Return default headers for YouTrack API calls."""
     token: str | None = token_override or YT_TOKEN
     if not token:
         raise RuntimeError('YT_TOKEN не налаштовано')
@@ -300,7 +300,7 @@ def _base_headers(token_override: str | None = None) -> dict[str, str]:
 
 
 def update_issue_summary(issue_id: str, summary: str) -> bool:
-    """Оновлює summary задачі через REST API."""
+    """Update issue summary via REST API."""
     headers: dict[str, str] = _base_headers()
     response: requests.Response = requests.post(
         f'{YT_BASE_URL}/api/issues/{issue_id}',

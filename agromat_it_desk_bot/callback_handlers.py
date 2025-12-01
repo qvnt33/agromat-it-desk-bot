@@ -1,4 +1,4 @@
-"""Надає хелпери для обробки Telegram callback'ів (кнопка "Прийняти")."""
+"""Helpers for handling Telegram callbacks (accept button)."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ _PROCESSED_LIMIT: int = 512
 
 
 class CallbackContext(NamedTuple):
-    """Описує структурований набір параметрів із callback-повідомлення Telegram."""
+    """Structured set of parameters from Telegram callback message."""
 
     callback_id: str
     chat_id: int
@@ -35,10 +35,10 @@ class CallbackContext(NamedTuple):
 
 
 def verify_telegram_secret(request: Request) -> None:
-    """Перевіряє секрет вебхука Telegram перед обробкою callback.
+    """Validate Telegram webhook secret before handling callback.
 
-    :param request: Запит FastAPI із заголовками Telegram.
-    :raises HTTPException: 403, якщо секрет не збігається.
+    :param request: FastAPI request with Telegram headers.
+    :raises HTTPException: 403 if secret mismatches.
     """
     if TELEGRAM_WEBHOOK_SECRET:
         secret: str | None = request.headers.get('X-Telegram-Bot-Api-Secret-Token')
@@ -48,10 +48,10 @@ def verify_telegram_secret(request: Request) -> None:
 
 
 def parse_action(payload: str) -> tuple[str, str | None]:
-    """Виділяє назву дії та параметр із callback-рядка.
+    """Extract action name and parameter from callback string.
 
-    :param payload: Рядок формату ``"accept|ABC-1"``.
-    :returns: Пару ``(назва дії, ID задачі)``.
+    :param payload: String like ``"accept|ABC-1"``.
+    :returns: Pair ``(action name, issue ID)``.
     """
     action, _, issue_id = payload.partition('|')
     logger.debug('Розбір дії callback: action=%s issue_id=%s', action, issue_id)
@@ -59,10 +59,10 @@ def parse_action(payload: str) -> tuple[str, str | None]:
 
 
 async def handle_accept(issue_id: str, context: CallbackContext) -> None:
-    """Призначає задачу в YouTrack та відповідає користувачу.
+    """Assign issue in YouTrack and reply to user.
 
-    :param issue_id: Читабельний ID задачі.
-    :param context: Контекст callback-запиту.
+    :param issue_id: Readable issue ID.
+    :param context: Callback request context.
     """
     if context.tg_user_id is None:
         logger.warning('Callback без ідентифікатора користувача: issue_id=%s', issue_id)
@@ -112,37 +112,37 @@ async def handle_accept(issue_id: str, context: CallbackContext) -> None:
 
 
 async def reply_unknown_action(callback_id: str) -> None:
-    """Відповідає на невідому дію callback-даних."""
+    """Respond to unknown callback action."""
     await _sender().answer_callback(callback_id, text=render(Msg.ERR_CALLBACK_UNKNOWN))
 
 
 async def reply_success(callback_id: str) -> None:
-    """Підтверджує користувачу успішне призначення."""
+    """Confirm successful assignment to user."""
     await _sender().answer_callback(callback_id, text=render(Msg.CALLBACK_ACCEPTED))
 
 
 async def reply_assign_failed(callback_id: str) -> None:
-    """Повідомляє про невдалу спробу призначення."""
+    """Notify about failed assignment attempt."""
     await _sender().answer_callback(callback_id, text=render(Msg.ERR_CALLBACK_ASSIGN_FAILED), show_alert=True)
 
 
 async def reply_assign_error(callback_id: str) -> None:
-    """Показує системну помилку під час прийняття."""
+    """Show system error during assignment."""
     await _sender().answer_callback(callback_id, text=render(Msg.ERR_CALLBACK_ASSIGN_ERROR), show_alert=True)
 
 
 async def reply_authorization_required(callback_id: str) -> None:
-    """Пояснює, що потрібно авторизуватись перед прийняттям задачі."""
+    """Explain authorization is required before accepting issue."""
     await _sender().answer_callback(callback_id, text=render(Msg.ERR_CALLBACK_AUTH_REQUIRED), show_alert=True)
 
 
 async def reply_token_required(callback_id: str) -> None:
-    """Пояснює, що необхідно оновити персональний токен."""
+    """Explain personal token must be updated."""
     await _sender().answer_callback(callback_id, text=render(Msg.ERR_CALLBACK_TOKEN_REQUIRED), show_alert=True)
 
 
 async def remove_keyboard(chat_id: int, message_id: int) -> None:
-    """Прибирає клавіатуру з повідомлення Telegram після успішного прийняття."""
+    """Remove keyboard from Telegram message after successful accept."""
     try:
         await _sender().edit_reply_markup(chat_id, message_id, {})
     except Exception as exc:  # noqa: BLE001
@@ -160,7 +160,7 @@ async def _update_issue_message(
     login: str | None,
     email: str | None,
 ) -> None:
-    """Оновлює текст повідомлення Telegram після призначення задачі."""
+    """Update Telegram message text after assigning issue."""
     details: IssueDetails | None = None
     try:
         details = await asyncio.to_thread(fetch_issue_details, issue_id)
@@ -216,7 +216,7 @@ async def _update_issue_message(
 
 
 def _resolve_issue_url(issue_id: str) -> str:
-    """Формує URL задачі для використання в повідомленні."""
+    """Compose issue URL for message use."""
     if issue_id and YT_BASE_URL:
         return f'{YT_BASE_URL}/issue/{issue_id}'
     return render(Msg.ERR_YT_ISSUE_NO_URL)

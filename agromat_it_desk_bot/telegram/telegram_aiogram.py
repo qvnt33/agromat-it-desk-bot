@@ -199,7 +199,7 @@ async def _on_accept_issue_callback(query: CallbackQuery) -> None:
     message_id: int = callback_message.message_id
     tg_user_id: int | None = query.from_user.id if query.from_user else None
     callback_id: str = query.id
-    payload_text: str = query.data or ''  # Рядок дії callback
+    payload_text: str = query.data or ''  # Callback action string
 
     logger.debug('Отримано callback: callback_id=%s payload=%s', callback_id, payload_text)
 

@@ -51,32 +51,32 @@ def _env_time(value: str | None, *, fallback: tuple[int, int]) -> tuple[int, int
     return fallback
 
 
-# Вказують токен бота Telegram (обовʼязково)
+# Telegram bot token (required)
 BOT_TOKEN: str | None = os.getenv('BOT_TOKEN')
 
-# Вказують ID цільового чату Telegram (обовʼязково)
+# Target Telegram chat ID (required)
 TELEGRAM_CHAT_ID: str | None = os.getenv('TELEGRAM_CHAT_ID')
 
-# Фіксують базову адресу інстансу YouTrack для формування посилань
+# Base YouTrack instance URL for links
 YT_BASE_URL: str = os.getenv('YT_BASE_URL', '').rstrip('/')
 
-# Визначають максимальну довжину опису, який надсилають у Telegram
+# Maximum length of description sent to Telegram
 DESCRIPTION_MAX_LEN: int = int(os.getenv('DESCRIPTION_MAX_LEN', '500'))
 
-# Налаштовують секрет для перевірки Telegram вебхука (X-Telegram-Bot-Api-Secret-Token)
+# Secret for Telegram webhook validation (X-Telegram-Bot-Api-Secret-Token)
 TELEGRAM_WEBHOOK_SECRET: str | None = os.getenv('TELEGRAM_WEBHOOK_SECRET')
 
-# Налаштовують секрет для перевірки YouTrack вебхука
+# Secret for YouTrack webhook validation
 YT_WEBHOOK_SECRET: str | None = os.getenv('YT_WEBHOOK_SECRET')
 
 
-# Задають параметри доступу до YouTrack API
+# YouTrack API access parameters
 YT_TOKEN: str | None = os.getenv('YT_TOKEN')
 
 PROJECT_KEY: str | None = os.getenv('YT_PROJECT_KEY')
 PROJECT_ID: str | None = os.getenv('YT_PROJECT_ID')
 
-# Шлях до локальної БД користувачів
+# Path to local user database
 _DATABASE_PATH_ENV: str | None = os.getenv('DATABASE_PATH')
 if _DATABASE_PATH_ENV:
     DATABASE_PATH: Path = Path(_DATABASE_PATH_ENV)
@@ -85,24 +85,24 @@ else:
     DATABASE_FILENAME: str = os.getenv('DATABASE_FILENAME', 'bot.sqlite3').strip() or 'bot.sqlite3'
     DATABASE_PATH = DATABASE_DIR / DATABASE_FILENAME
 
-# Таймаути та кількість спроб перевірки токенів YouTrack
+# Timeouts and retry counts for YouTrack token checks
 YT_VALIDATE_TIMEOUT: float = float(os.getenv('YT_VALIDATE_TIMEOUT', '5.0'))
 YT_VALIDATE_RETRIES: int = int(os.getenv('YT_VALIDATE_RETRIES', '3'))
 
-# Визначають назву кастом-філда для виконавця в YouTrack (за замовчуванням Assignee)
+# Name of assignee custom field in YouTrack (defaults to Assignee)
 YOUTRACK_ASSIGNEE_FIELD_NAME: str = os.getenv('YOUTRACK_ASSIGNEE_FIELD_NAME', 'Assignee')
 
-# Поле статусу та значення для режиму «В роботі»
+# Status field and value for "In progress"
 YOUTRACK_STATE_FIELD_NAME: str | None = os.getenv('YOUTRACK_STATE_FIELD_NAME')
 YOUTRACK_STATE_IN_PROGRESS: str | None = os.getenv('YOUTRACK_STATE_IN_PROGRESS')
 
-# Рівень логування для root/основних хендлерів
+# Log level for root/primary handlers
 LOG_LEVEL: str = os.getenv('LOG_LEVEL', 'INFO').strip() or 'INFO'
 
-# Секрет для шифрування персональних токенів користувачів
+# Secret to encrypt user personal tokens
 USER_TOKEN_SECRET: str | None = os.getenv('USER_TOKEN_SECRET')
 
-# Шаблони текстів
+# Text templates
 TELEGRAM_MAIN_MESSAGE_TEMPLATE = (
     '{header}\n'
     '\n'
@@ -113,7 +113,7 @@ TELEGRAM_MAIN_MESSAGE_TEMPLATE = (
     '{description}'
 )
 
-# Налаштування тижневого розкладу (Outlook/Exchange)
+# Weekly schedule settings (Outlook/Exchange)
 SCHEDULE_PIN_WEEKLY: bool = True
 SCHEDULE_EXCHANGE_EMAIL: str | None = os.getenv('SCHEDULE_EXCHANGE_EMAIL')
 SCHEDULE_EXCHANGE_USERNAME: str | None = os.getenv('SCHEDULE_EXCHANGE_USERNAME') or SCHEDULE_EXCHANGE_EMAIL

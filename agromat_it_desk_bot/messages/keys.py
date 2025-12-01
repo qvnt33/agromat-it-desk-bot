@@ -11,7 +11,7 @@ class Msg(str, Enum):
     групування повідомлень.
     """
 
-    # Інформаційні повідомлення
+    # Informational messages
     NOT_ASSIGNED = 'msg.not_assigned'
     AUTH_WELCOME = 'auth.welcome'
     AUTH_HELP = 'auth.help'
@@ -52,7 +52,7 @@ class Msg(str, Enum):
     SCHEDULE_WEEKLY_BODY = 'schedule.weekly_body'
     SCHEDULE_DAILY_ENTRY = 'schedule.daily_entry'
 
-    # Помилки та попередження
+    # Errors and warnings
     ERR_TG_ID_UNAVAILABLE = 'err.tg_id_unavailable'
     ERR_LOGIN_TAKEN = 'err.login_taken'
     ERR_CONFIRM_MISMATCH = 'err.confirm_mismatch'

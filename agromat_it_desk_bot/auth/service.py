@@ -1,4 +1,4 @@
-"""Виконує бізнес-логіку авторизації користувачів бота."""
+"""Implements business logic of bot user authorization."""
 
 from __future__ import annotations
 
@@ -33,11 +33,11 @@ _migrated: bool = False
 
 
 class RegistrationError(RuntimeError):
-    """Сигналізує про помилку під час реєстрації користувача."""
+    """Signal an error during user registration."""
 
 
 class RegistrationOutcome(str, Enum):
-    """Описує можливі результати реєстрації користувача."""
+    """Describe possible outcomes of user registration."""
 
     SUCCESS = 'success'
     ALREADY_CONNECTED = 'already_connected'
@@ -45,12 +45,12 @@ class RegistrationOutcome(str, Enum):
 
 
 def register_user(tg_user_id: int, token_plain: str) -> RegistrationOutcome:  # noqa: C901
-    """Реєструє користувача на основі персонального токена YouTrack.
+    """Register user using personal YouTrack token.
 
-    :param tg_user_id: Ідентифікатор користувача Telegram.
-    :param token_plain: Персональний токен YouTrack.
-    :returns: Результат реєстрації.
-    :raises RegistrationError: Якщо токен некоректний або користувач не у проєкті.
+    :param tg_user_id: Telegram user identifier.
+    :param token_plain: Personal YouTrack token.
+    :returns: Registration result.
+    :raises RegistrationError: If token invalid or user not in project.
     """
     try:
         is_valid, payload = validate_token(token_plain)
@@ -140,10 +140,10 @@ def register_user(tg_user_id: int, token_plain: str) -> RegistrationOutcome:  # 
 
 
 def is_authorized(tg_user_id: int) -> bool:
-    """Перевіряє, чи користувач має активний доступ до бота.
+    """Check whether user has active access to bot.
 
-    :param tg_user_id: Telegram ID користувача.
-    :returns: ``True`` якщо користувач активований.
+    :param tg_user_id: Telegram user ID.
+    :returns: ``True`` if user is activated.
     """
     _ensure_migrated()
     record = fetch_user_by_tg_id(tg_user_id)
@@ -155,10 +155,10 @@ def is_authorized(tg_user_id: int) -> bool:
 
 
 def get_authorized_yt_user(tg_user_id: int) -> tuple[str | None, str | None, str | None]:
-    """Повертає дані користувача YouTrack, якщо він авторизований.
+    """Return YouTrack user data if authorized.
 
-    :param tg_user_id: Telegram ID користувача.
-    :returns: ``(login, email, yt_user_id)`` або ``(None, None, None)``.
+    :param tg_user_id: Telegram user ID.
+    :returns: ``(login, email, yt_user_id)`` or ``(None, None, None)``.
     """
     _ensure_migrated()
     record = fetch_user_by_tg_id(tg_user_id)
@@ -172,7 +172,7 @@ def get_authorized_yt_user(tg_user_id: int) -> tuple[str | None, str | None, str
 
 
 def get_user_token(tg_user_id: int) -> str | None:
-    """Повертає персональний токен користувача для викликів YouTrack."""
+    """Return user's personal token for YouTrack calls."""
     _ensure_migrated()
     record = fetch_user_by_tg_id(tg_user_id)
     if record is None or not record.get('is_active'):
@@ -188,9 +188,9 @@ def get_user_token(tg_user_id: int) -> str | None:
 
 
 def deactivate_user(tg_user_id: int) -> None:
-    """Вимикає доступ користувача та видаляє хеш токена.
+    """Disable user access and remove token hash.
 
-    :param tg_user_id: Telegram ID користувача.
+    :param tg_user_id: Telegram user ID.
     """
     _ensure_migrated()
     storage_deactivate_user(tg_user_id)
@@ -198,23 +198,23 @@ def deactivate_user(tg_user_id: int) -> None:
 
 
 def _hash_token(token_plain: str) -> str:
-    """Обчислює SHA-256 хеш токена."""
+    """Compute SHA-256 hash of token."""
     digest = hashlib.sha256()
     digest.update(token_plain.encode('utf-8'))
     return digest.hexdigest()
 
 
 def _encrypt_token(token_plain: str) -> str:
-    """Шифрує персональний токен для збереження у БД."""
+    """Encrypt personal token for storage in DB."""
     key: bytes | None = _token_secret_bytes(strict=True)
-    if key is None:  # pragma: no cover - контролюється у strict режимі
+    if key is None:  # pragma: no cover - handled in strict mode
         raise RegistrationError('USER_TOKEN_SECRET не налаштовано')
     encrypted: bytes = _xor_bytes(token_plain.encode('utf-8'), key)
     return urlsafe_b64encode(encrypted).decode('ascii')
 
 
 def _decrypt_token(token_encrypted: str) -> str | None:
-    """Дешифрує токен користувача."""
+    """Decrypt user token."""
     key: bytes | None = _token_secret_bytes(strict=False)
     if key is None:
         return None
@@ -232,7 +232,7 @@ def _decrypt_token(token_encrypted: str) -> str | None:
 
 
 def _token_secret_bytes(strict: bool) -> bytes | None:
-    """Повертає ключ для шифрування токенів."""
+    """Return key for token encryption."""
     secret: str | None = app_config.USER_TOKEN_SECRET
     if not secret:
         if strict:
@@ -245,18 +245,18 @@ def _token_secret_bytes(strict: bool) -> bytes | None:
 
 
 def _xor_bytes(data: bytes, key: bytes) -> bytes:
-    """Виконує XOR шифрування/дешифрування даних."""
+    """Perform XOR encryption/decryption."""
     key_len: int = len(key)
     return bytes(byte ^ key[index % key_len] for index, byte in enumerate(data))
 
 
 def _utcnow() -> str:
-    """Повертає поточний час у форматі ISO."""
+    """Return current time in ISO format."""
     return datetime.now(tz=timezone.utc).isoformat()
 
 
 def _ensure_migrated() -> None:
-    """Виконує міграцію таблиць один раз за життєвий цикл процесу."""
+    """Run migrations once per process lifetime."""
     global _migrated
     if _migrated:
         return

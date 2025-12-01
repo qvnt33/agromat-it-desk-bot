@@ -1,4 +1,4 @@
-"""Загальні допоміжні функції для роботи з даними задач та форматування."""
+"""Common helpers for issue data processing and formatting."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ _STATUS_EMOJI_DEFAULT: str = '🟤'
 
 
 class _HTMLStripper(HTMLParser):
-    """Перетворює HTML на текст, зберігаючи прості розриви рядків."""
+    """Convert HTML to text while preserving simple line breaks."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -64,7 +64,7 @@ class _HTMLStripper(HTMLParser):
 
 
 def strip_html(value: str) -> str:
-    """Видаляє HTML-теги та розкодовує сутності."""
+    """Remove HTML tags and unescape entities."""
     value = _HTML_COMMENT_RE.sub('', value)
     stripper = _HTMLStripper()
     stripper.feed(value)
@@ -73,7 +73,7 @@ def strip_html(value: str) -> str:
 
 
 def _stringify_issue_value(value: object | None) -> str | None:
-    """Повертає рядкове представлення значення з payload YouTrack."""
+    """Return string representation of value from YouTrack payload."""
     if value is None:
         return None
     if isinstance(value, str):
@@ -96,7 +96,7 @@ def _stringify_issue_value(value: object | None) -> str | None:
 
 
 def normalize_issue_summary(summary_raw: str | None) -> str:
-    """Повертає валідний заголовок задачі з урахуванням поштових заглушок."""
+    """Return valid issue summary considering email placeholders."""
     summary_text: str = (summary_raw or '').strip()
     if not summary_text:
         return render(Msg.YT_EMAIL_SUBJECT_MISSING)
@@ -106,7 +106,7 @@ def normalize_issue_summary(summary_raw: str | None) -> str:
 
 
 def _extract_from_custom_fields(custom_fields: object, names: Iterable[str]) -> str | None:
-    """Повертає значення поля з переліку customFields."""
+    """Return field value from customFields list."""
     if not isinstance(custom_fields, list):
         return None
     normalized: set[str] = {name.casefold() for name in names if name}
@@ -128,7 +128,7 @@ def _extract_from_custom_fields(custom_fields: object, names: Iterable[str]) -> 
 
 
 def extract_issue_status(issue: Mapping[str, object]) -> str | None:
-    """Повертає статус задачі з payload YouTrack."""
+    """Return issue status from YouTrack payload."""
     status: str | None = _stringify_issue_value(issue.get('status'))
     if status:
         return status
@@ -140,7 +140,7 @@ def extract_issue_status(issue: Mapping[str, object]) -> str | None:
 
 
 def extract_issue_assignee(issue: Mapping[str, object]) -> str | None:
-    """Повертає виконавця задачі з payload YouTrack."""
+    """Return issue assignee from YouTrack payload."""
     assignee: str | None = _stringify_issue_value(issue.get('assignee'))
     if assignee:
         return assignee
@@ -149,7 +149,7 @@ def extract_issue_assignee(issue: Mapping[str, object]) -> str | None:
 
 
 def extract_issue_author(issue: Mapping[str, object]) -> str | None:
-    """Повертає автора (репортера) задачі з payload YouTrack."""
+    """Return issue author (reporter) from YouTrack payload."""
     for key in ('author', 'reporter', 'createdBy'):
         author_candidate: str | None = _stringify_issue_value(issue.get(key))
         if author_candidate:
@@ -158,7 +158,7 @@ def extract_issue_author(issue: Mapping[str, object]) -> str | None:
 
 
 def _resolve_log_level(target_level: str | None) -> str | None:
-    """Повертає валідне ім'я рівня логування (DEBUG/INFO/...)."""
+    """Return valid logging level name (DEBUG/INFO/...)."""
     if not target_level:
         return None
     normalized: str = target_level.strip()
@@ -174,7 +174,7 @@ def _resolve_log_level(target_level: str | None) -> str | None:
 
 
 def _apply_log_level_override(config_data: dict[str, Any], level_name: str) -> None:
-    """Оновлює рівні root/стандартних хендлерів під час конфігурації."""
+    """Update levels of root/standard handlers during configuration."""
     handlers_obj: object = config_data.get('handlers')
     if isinstance(handlers_obj, dict):
         for handler_cfg in handlers_obj.values():
@@ -193,11 +193,11 @@ def _apply_log_level_override(config_data: dict[str, Any], level_name: str) -> N
 
 
 def configure_logging(config_path: Path | None = None) -> None:
-    """Завантажує конфіг логування з ``logging.conf`` або застосовує дефолт."""
-    # Шлях до файлу конфігурації логування
+    """Load logging configuration from ``logging.conf`` or apply defaults."""
+    # Path to logging configuration file
     target_path: Path = config_path if config_path is not None else Path(__file__).resolve().parents[1] / 'logging.conf'
     try:
-        # Зчитування налаштувань логування
+        # Read logging settings
         with target_path.open('r', encoding='utf-8') as config_file:
             config_data: dict[str, Any] = json.load(config_file)
     except FileNotFoundError:
@@ -216,20 +216,20 @@ def configure_logging(config_path: Path | None = None) -> None:
 
 
 def get_str(source: Mapping[str, object], key: str) -> str:
-    """Повертає значення ключа як рядок без зайвих пробілів."""
+    """Return key value as trimmed string."""
     value: object | None = source.get(key)
     return '' if value is None else str(value).strip()
 
 
 def extract_issue_id(issue: Mapping[str, object]) -> str:
-    """Отримує читабельний ID задачі (<PROJECT>-<NUMBER>) з доступних полів або формує його."""
+    """Get readable issue ID (<PROJECT>-<NUMBER>) from available fields or compose one."""
     identifier: str = get_str(issue, 'idReadable') or get_str(issue, 'id')
     if identifier:
         return identifier
 
-    number: object | None = issue.get('numberInProject')  # Номер задачі в межах проєкту
-    project_raw: object | None = issue.get('project')  # Сирі дані проєкту з вебхука
-    project_short: str | None = None  # Скорочена назва проєкту
+    number: object | None = issue.get('numberInProject')  # Ticket number within project
+    project_raw: object | None = issue.get('project')  # Raw project data from webhook
+    project_short: str | None = None  # Short project name
 
     if project_raw is not None and isinstance(project_raw, dict):
         short_name_obj: object | None = project_raw.get('shortName')
@@ -243,7 +243,7 @@ def extract_issue_id(issue: Mapping[str, object]) -> str:
             project_short = name
 
     if project_short is not None and isinstance(number, (str, int)):
-        # Формування читабельного ідентифікатора PROJECT-N
+        # Build readable identifier PROJECT-N
         return f'{project_short}-{number}'
 
     issue_id_unknown_msg: str = render(Msg.YT_ISSUE_NO_ID)
@@ -261,16 +261,16 @@ def format_telegram_message(
     status: str | None = None,
     author: str | None = None,
 ) -> str:
-    """Формує HTML-повідомлення для Telegram.
+    """Build HTML message for Telegram.
 
-    :param issue_id: Короткий ідентифікатор задачі.
-    :param summary_raw: Назва задачі з вебхука або API.
-    :param description_raw: Опис задачі.
-    :param url: Посилання на задачу (може бути повідомленням про помилку).
-    :param assignee: Текстове представлення виконавця.
-    :param status: Людиночитний статус задачі.
-    :param author: Текстове представлення автора (репортера).
-    :returns: Готовий HTML текст повідомлення.
+    :param issue_id: Short issue identifier.
+    :param summary_raw: Issue name from webhook or API.
+    :param description_raw: Issue description.
+    :param url: Issue link (may be error message).
+    :param assignee: Text representation of assignee.
+    :param status: Human-readable issue status.
+    :param author: Text representation of author (reporter).
+    :returns: Ready HTML message text.
     """
     formatted_issue_id: str = escape(issue_id)
     summary_value: str = summary_raw.strip()
@@ -313,7 +313,7 @@ def format_telegram_message(
 
 
 def _pick_status_emoji(status: str | None) -> str:
-    """Повертає емодзі відповідно до статусу."""
+    """Return emoji according to status."""
     if not status:
         return _STATUS_EMOJI_DEFAULT
     normalized: str = status.strip().casefold()

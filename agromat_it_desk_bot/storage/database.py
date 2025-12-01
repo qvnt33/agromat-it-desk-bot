@@ -1,4 +1,4 @@
-"""Забезпечує доступ до локального сховища користувачів Telegram."""
+"""Provides access to local storage of Telegram users."""
 
 from __future__ import annotations
 
@@ -13,15 +13,15 @@ from agromat_it_desk_bot.config import DATABASE_PATH
 
 
 class DatabaseError(RuntimeError):
-    """Вказує на збій під час роботи з локальною БД."""
+    """Indicates a failure when working with local DB."""
 
 
 class ProjectConfigurationError(RuntimeError):
-    """Сигналізує про проблеми з конфігурацією проєкту YouTrack."""
+    """Signals issues with YouTrack project configuration."""
 
 
 class UserRecord(TypedDict, total=False):
-    """Описує запис користувача у локальній БД."""
+    """Describes a user record in local DB."""
 
     id: int
     tg_user_id: int
@@ -39,7 +39,7 @@ class UserRecord(TypedDict, total=False):
 
 
 class IssueAlertRecord(TypedDict):
-    """Описує нагадування для задачі в статусі ``Нова``."""
+    """Describes alert for issue in ``New`` status."""
 
     issue_id: str
     alert_index: int
@@ -49,7 +49,7 @@ class IssueAlertRecord(TypedDict):
 
 
 class IssueMessageRecord(TypedDict):
-    """Описує Telegram-повідомлення, пов'язане із заявкою."""
+    """Describes Telegram message linked to issue."""
 
     issue_id: str
     chat_id: str
@@ -58,7 +58,7 @@ class IssueMessageRecord(TypedDict):
 
 
 def migrate() -> None:
-    """Створює таблицю ``users`` у БД, якщо вона ще не існує."""
+    """Create ``users`` table in DB if it does not exist."""
     path: Path = DATABASE_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -121,7 +121,7 @@ def migrate() -> None:
 
 
 def _ensure_columns(connection: sqlite3.Connection) -> None:
-    """Гарантує наявність обовʼязкових полів у таблиці users."""
+    """Ensure required columns exist in users table."""
     cursor = connection.cursor()
     cursor.execute('PRAGMA table_info(users)')
     columns: set[str] = {str(row['name']) for row in cursor.fetchall()}
@@ -136,7 +136,7 @@ def _ensure_columns(connection: sqlite3.Connection) -> None:
 
 
 def _ensure_issue_message_columns(connection: sqlite3.Connection) -> None:
-    """Гарантує наявність поля archived у таблиці issue_messages."""
+    """Ensure archived column exists in issue_messages table."""
     cursor = connection.cursor()
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='issue_messages'")
     if cursor.fetchone() is None:
@@ -149,7 +149,7 @@ def _ensure_issue_message_columns(connection: sqlite3.Connection) -> None:
 
 
 def _backfill_registered_at(connection: sqlite3.Connection) -> None:
-    """Заповнює поле registered_at для наявних записів."""
+    """Populate registered_at for existing records."""
     now: str = _utcnow()
     cursor = connection.cursor()
     cursor.execute(
@@ -181,7 +181,7 @@ def _backfill_registered_at(connection: sqlite3.Connection) -> None:
 
 
 def _ensure_unique_index(connection: sqlite3.Connection) -> None:
-    """Додає унікальний індекс на ``yt_user_id`` та перевіряє відсутність дублікатів."""
+    """Add unique index on ``yt_user_id`` and check duplicates."""
     cursor = connection.cursor()
     cursor.execute(
         """
@@ -213,10 +213,10 @@ def _ensure_unique_index(connection: sqlite3.Connection) -> None:
 
 
 def upsert_user(record: UserRecord) -> None:
-    """Додає або оновлює користувача в БД.
+    """Insert or update user in DB.
 
-    :param record: Дані користувача для збереження.
-    :raises DatabaseError: Якщо операція завершилася помилкою.
+    :param record: User data to persist.
+    :raises DatabaseError: If operation fails.
     """
     _assert_required(record, ('tg_user_id', 'yt_user_id', 'yt_login'))
     now: str = _utcnow()
@@ -359,7 +359,7 @@ def upsert_user(record: UserRecord) -> None:
 
 
 def fetch_user_by_tg_id(tg_user_id: int) -> UserRecord | None:
-    """Повертає активного користувача за Telegram ID."""
+    """Return active user by Telegram ID."""
     with _connect() as connection:
         cursor = connection.cursor()
         cursor.execute(
@@ -390,7 +390,7 @@ def fetch_user_by_tg_id(tg_user_id: int) -> UserRecord | None:
 
 
 def fetch_user_by_yt_id(yt_user_id: str) -> UserRecord | None:
-    """Повертає користувача за YouTrack ID."""
+    """Return user by YouTrack ID."""
     with _connect() as connection:
         cursor = connection.cursor()
         cursor.execute(
@@ -422,7 +422,7 @@ def fetch_user_by_yt_id(yt_user_id: str) -> UserRecord | None:
 
 
 def deactivate_user(tg_user_id: int) -> None:
-    """Деактивує користувача та видаляє хеш токена."""
+    """Deactivate user and clear token hash."""
     now: str = _utcnow()
     with _connect() as connection:
         cursor = connection.cursor()
@@ -444,7 +444,7 @@ def deactivate_user(tg_user_id: int) -> None:
 
 
 def upsert_issue_message(issue_id: str, chat_id: int | str, message_id: int) -> None:
-    """Зберігає або оновлює зв'язок між задачею та повідомленням Telegram."""
+    """Store or update mapping between issue and Telegram message."""
     now: str = _utcnow()
     chat_value: str = str(chat_id)
     with _connect() as connection:
@@ -477,7 +477,7 @@ def upsert_issue_message(issue_id: str, chat_id: int | str, message_id: int) -> 
 
 
 def fetch_issue_message(issue_id: str) -> dict[str, str | int] | None:
-    """Повертає інформацію про повідомлення Telegram для задачі."""
+    """Return Telegram message info for issue."""
     with _connect() as connection:
         cursor = connection.cursor()
         _ensure_issue_message_columns(connection)
@@ -501,7 +501,7 @@ def fetch_issue_message(issue_id: str) -> dict[str, str | int] | None:
 
 
 def fetch_stale_issue_messages(older_than_iso: str) -> list[IssueMessageRecord]:
-    """Повертає повідомлення, які потребують архівації."""
+    """Return messages that need archiving."""
     with _connect() as connection:
         cursor = connection.cursor()
         _ensure_issue_message_columns(connection)
@@ -532,7 +532,7 @@ def upsert_issue_alerts(
     message_id: int,
     alerts: Sequence[tuple[int, str]],
 ) -> None:
-    """Зберігає графік сповіщень про статус ``Нова``."""
+    """Save alert schedule for ``New`` status."""
     if not alerts:
         clear_issue_alerts(issue_id)
         return
@@ -552,7 +552,7 @@ def upsert_issue_alerts(
 
 
 def clear_issue_alerts(issue_id: str) -> None:
-    """Видаляє всі нагадування для задачі."""
+    """Remove all alerts for issue."""
     with _connect() as connection:
         cursor = connection.cursor()
         _ensure_issue_alerts_table(cursor)
@@ -561,7 +561,7 @@ def clear_issue_alerts(issue_id: str) -> None:
 
 
 def fetch_due_issue_alerts(limit: int, upper_bound_iso: str) -> list[IssueAlertRecord]:
-    """Повертає нагадування, час яких настав."""
+    """Return alerts whose time has come."""
     with _connect() as connection:
         cursor = connection.cursor()
         _ensure_issue_alerts_table(cursor)
@@ -590,7 +590,7 @@ def fetch_due_issue_alerts(limit: int, upper_bound_iso: str) -> list[IssueAlertR
 
 
 def mark_issue_alert_sent(issue_id: str, alert_index: int) -> None:
-    """Позначає нагадування як надіслане."""
+    """Mark alert as sent."""
     with _connect() as connection:
         cursor = connection.cursor()
         _ensure_issue_alerts_table(cursor)
@@ -607,7 +607,7 @@ def mark_issue_alert_sent(issue_id: str, alert_index: int) -> None:
 
 
 def mark_issue_archived(issue_id: str) -> None:
-    """Позначає повідомлення як архівоване."""
+    """Mark message as archived."""
     now: str = _utcnow()
     with _connect() as connection:
         cursor = connection.cursor()
@@ -625,7 +625,7 @@ def mark_issue_archived(issue_id: str) -> None:
 
 
 def _ensure_issue_alerts_table(cursor: sqlite3.Cursor) -> None:
-    """Гарантує наявність таблиці issue_alerts."""
+    """Ensure issue_alerts table exists."""
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS issue_alerts (
@@ -648,7 +648,7 @@ def _ensure_issue_alerts_table(cursor: sqlite3.Cursor) -> None:
 
 
 def touch_last_seen(tg_user_id: int) -> None:
-    """Оновлює поле ``last_seen_at`` для користувача."""
+    """Update user's ``last_seen_at`` field."""
     now: str = _utcnow()
     with _connect() as connection:
         cursor = connection.cursor()
@@ -665,7 +665,7 @@ def touch_last_seen(tg_user_id: int) -> None:
 
 @contextmanager
 def _connect() -> Iterator[sqlite3.Connection]:
-    """Створює підключення до бази даних."""
+    """Create database connection."""
     connection = sqlite3.connect(
         str(DATABASE_PATH),
         detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES,
@@ -682,7 +682,7 @@ def _connect() -> Iterator[sqlite3.Connection]:
 
 
 def _row_to_record(row: sqlite3.Row) -> UserRecord:
-    """Перетворює рядок SQLite на ``UserRecord``."""
+    """Convert SQLite row to ``UserRecord``."""
     result: UserRecord = {
         'id': int(row['id']),
         'tg_user_id': int(row['tg_user_id']),
@@ -702,12 +702,12 @@ def _row_to_record(row: sqlite3.Row) -> UserRecord:
 
 
 def _utcnow() -> str:
-    """Повертає поточний момент часу в ISO-форматі."""
+    """Return current time in ISO format."""
     return datetime.now(tz=timezone.utc).isoformat()
 
 
 def _assert_required(record: UserRecord, fields: tuple[str, ...]) -> None:
-    """Перевіряє наявність обовʼязкових полів у записі."""
+    """Check presence of required fields in record."""
     missing: tuple[str, ...] = tuple(field for field in fields if field not in record)
     if missing:
         names: str = ', '.join(missing)

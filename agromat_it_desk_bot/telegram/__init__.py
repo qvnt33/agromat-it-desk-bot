@@ -14,7 +14,7 @@ from .telegram_commands import (
     notify_authorization_required,
 )
 
-# Публічний API telegram-пакета
+# Public API of telegram package
 __all__ = [
     'configure',
     'process_update',

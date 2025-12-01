@@ -34,10 +34,10 @@ def render(msg: Msg, /, *, locale: str = 'uk', **params: Any) -> str:
     """
     try:
         template: str = get_catalog(locale)[msg]
-    except KeyError as exc:  # pragma: no cover - захист від некоректних локалей
+    except KeyError as exc:  # pragma: no cover - guard against invalid locales
         raise KeyError(f'Невідома локаль або ключ: {locale}/{msg.name}') from exc
 
-    # Визначають очікувані плейсхолдери та зіставляють їх із переданими значеннями
+    # Determine expected placeholders and map them to provided values
     expected: set[str] = _extract_fields(template)
     provided: set[str] = set(params)
 
@@ -49,5 +49,5 @@ def render(msg: Msg, /, *, locale: str = 'uk', **params: Any) -> str:
     if missing:
         raise KeyError(f'Відсутні параметри: {missing}')
 
-    # Застосовують стандартний ``str.format`` після перевірок
+    # Apply standard ``str.format`` after validations
     return template.format(**params)
