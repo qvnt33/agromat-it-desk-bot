@@ -308,7 +308,7 @@ class SchedulePublisher:
         if not subjects:
             subjects.append(_format_subject(None, ()))
         body = ', '.join(subjects)
-        return f'<b>{weekday} ({day_label}) — </b>{body}'
+        return f'<b>{weekday} ({day_label})</b> — {body}'
 
 
 class DailyReminder:
@@ -386,45 +386,6 @@ def _format_subject(name: str | None, _categories: Sequence[str]) -> str:
     if not text_raw:
         text_raw = 'N/A'
     return f'<code>{escape_html(text_raw)}</code>'
-
-
-def _extract_email_address(entry: Any) -> str | None:  # noqa: ANN401
-    email_candidate = _normalize_email(entry)
-    if email_candidate:
-        return email_candidate
-    mailbox_obj = getattr(entry, 'mailbox', None)
-    return _normalize_email(mailbox_obj)
-
-
-def _normalize_email(value: Any) -> str | None:  # noqa: ANN401,C901
-    if value is None:
-        return None
-    if isinstance(value, str):
-        text = value.strip()
-        return text or None
-    nested = getattr(value, 'email_address', None)
-    if isinstance(nested, str):
-        text = nested.strip()
-        return text or None
-    if hasattr(nested, 'email'):
-        nested_email = getattr(nested, 'email', None)
-        if isinstance(nested_email, str):
-            text = nested_email.strip()
-            return text or None
-    direct_email = getattr(value, 'email', None)
-    if isinstance(direct_email, str):
-        text = direct_email.strip()
-        return text or None
-    if isinstance(value, dict):
-        options: tuple[str, ...] = ('email_address', 'email')
-        for option in options:
-            raw = value.get(option)
-            if isinstance(raw, str):
-                text = raw.strip()
-                if text:
-                    return text
-    return None
-
 
 def build_schedule_publisher(sender: TelegramSender) -> SchedulePublisher | None:
     """Створює публікатор розкладу, якщо ввімкнено відповідні налаштування."""
@@ -512,8 +473,3 @@ def _is_exchange_auth_error(exc: Exception) -> bool:
         message = str(exc).lower()
         return 'invalid credentials' in message or 'unauthorized' in message
     return isinstance(exc, (ErrorInvalidUserCredentials, UnauthorizedError))
-
-
-def _sanitize_alert_text(text: str) -> str:
-    """Перетворює `br` на перенос рядка для підтримки parse_mode=HTML."""
-    return text.replace('<br/>', '\n').replace('<br>', '\n')

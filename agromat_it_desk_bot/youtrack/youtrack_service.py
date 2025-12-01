@@ -127,26 +127,6 @@ def _pick_field(fields: CustomFieldMap, names: set[str]) -> CustomField | None:
     return None
 
 
-def lookup_user_by_login(login: str) -> tuple[str | None, str | None, str | None]:
-    """Повертає ``login``, ``email`` та ``id`` користувача YouTrack за логіном."""
-    if not login:
-        return None, None, None
-
-    user: YouTrackUser | None = find_user(login, None)
-    if user is None:
-        return None, None, None
-
-    login_value: str | None = user.get('login')
-    resolved_login: str | None = login_value if isinstance(login_value, str) else login
-
-    email_value: str | None = user.get('email')
-    email: str | None = email_value if isinstance(email_value, str) else None
-
-    user_id_value: str | None = user.get('id')
-    yt_user_id: str | None = user_id_value if isinstance(user_id_value, str) else None
-    return resolved_login, email, yt_user_id
-
-
 def _ensure_in_progress(issue_id: str, issue_id_readable: str, auth_token: str | None) -> bool:
     """Встановлює статус задачі у значення «в роботі», якщо налаштовано."""
     if not auth_token:

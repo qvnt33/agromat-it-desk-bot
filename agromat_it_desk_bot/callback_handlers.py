@@ -47,58 +47,6 @@ def verify_telegram_secret(request: Request) -> None:
             raise HTTPException(status_code=403, detail='Доступ заборонено.')
 
 
-def parse_callback_payload(payload: Any) -> CallbackContext | None:
-    """Розбирає callback-пейлоад та будує контекст.
-
-    :param payload: Сирий JSON із даними Telegram.
-    :returns: ``CallbackContext`` або ``None``.
-    """
-    callback = payload.get('callback_query')
-    if callback is None:
-        logger.debug('Callback payload без callback_query: %s', payload)
-        return None
-
-    callback_id_obj: object | None = callback.get('id')
-    # Ідентифікатор callback для відповіді
-    callback_id: str | None = str(callback_id_obj) if isinstance(callback_id_obj, (str, int)) else None
-
-    from_user_mapping = callback.get('from')
-    tg_user_id: int | None = None
-    if from_user_mapping is not None:
-        # Telegram ID користувача з оновлення
-        tg_user_id_obj: object | None = from_user_mapping.get('id')
-        if isinstance(tg_user_id_obj, int):
-            tg_user_id = tg_user_id_obj
-
-    chat_id: int | None = None
-    message_id: int | None = None
-    message_mapping = callback.get('message')
-    if message_mapping is not None:
-        chat_mapping = message_mapping.get('chat')
-        if chat_mapping is not None:
-            chat_id_obj: object | None = chat_mapping.get('id')
-            if isinstance(chat_id_obj, int):
-                chat_id = chat_id_obj
-
-        message_id_obj: object | None = message_mapping.get('message_id')
-        # Оригінальне повідомлення для редагування клавіатури
-        if isinstance(message_id_obj, int):
-            message_id = message_id_obj
-
-    payload_raw: object | None = callback.get('data')
-    payload_value: str = str(payload_raw) if isinstance(payload_raw, (str, int)) else ''
-
-    if not (callback_id and chat_id and message_id):
-        logger.debug('Некоректний callback: callback_id=%s chat_id=%s message_id=%s',
-                     callback_id,
-                     chat_id,
-                     message_id)
-        return None
-    context = CallbackContext(callback_id, chat_id, message_id, payload_value, tg_user_id)
-    logger.debug('Побудовано CallbackContext: callback_id=%s tg_user_id=%s', callback_id, tg_user_id)
-    return context
-
-
 def parse_action(payload: str) -> tuple[str, str | None]:
     """Виділяє назву дії та параметр із callback-рядка.
 
