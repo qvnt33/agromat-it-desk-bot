@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import deque
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
 from fastapi import HTTPException, Request
 

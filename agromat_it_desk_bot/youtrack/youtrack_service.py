@@ -9,12 +9,10 @@ from typing import NamedTuple
 from .youtrack_client import (
     CustomField,
     CustomFieldMap,
-    YouTrackUser,
     assign_custom_field,
     fetch_issue_custom_fields,
     fetch_issue_overview,
     find_state_value_id,
-    find_user,
     get_issue_internal_id,
     update_issue_summary,
 )

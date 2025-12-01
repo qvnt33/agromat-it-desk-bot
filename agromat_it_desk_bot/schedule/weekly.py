@@ -308,7 +308,7 @@ class SchedulePublisher:
         if not subjects:
             subjects.append(_format_subject(None, ()))
         body = ', '.join(subjects)
-        return f'<b>{weekday} ({day_label})</b> — {body}'
+        return f'<b>{weekday} ({day_label}) — </b>{body}'
 
 
 class DailyReminder:
@@ -386,6 +386,7 @@ def _format_subject(name: str | None, _categories: Sequence[str]) -> str:
     if not text_raw:
         text_raw = 'N/A'
     return f'<code>{escape_html(text_raw)}</code>'
+
 
 def build_schedule_publisher(sender: TelegramSender) -> SchedulePublisher | None:
     """Створює публікатор розкладу, якщо ввімкнено відповідні налаштування."""

@@ -15,6 +15,7 @@ import uvicorn
 from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramBadRequest
 from fastapi import FastAPI, HTTPException, Request
+from pydantic import ValidationError
 
 from agromat_it_desk_bot.alerts.archiver import IssueArchiverWorker
 from agromat_it_desk_bot.alerts.new_status import (
@@ -25,6 +26,7 @@ from agromat_it_desk_bot.alerts.new_status import (
 from agromat_it_desk_bot.callback_handlers import verify_telegram_secret
 from agromat_it_desk_bot.config import BOT_TOKEN, TELEGRAM_CHAT_ID, YT_BASE_URL, YT_WEBHOOK_SECRET
 from agromat_it_desk_bot.messages import Msg, render
+from agromat_it_desk_bot.models import YouTrackUpdatePayload, YouTrackWebhookPayload
 from agromat_it_desk_bot.schedule import (
     DailyReminder,
     SchedulePublisher,
@@ -265,14 +267,6 @@ def _prepare_issue_payload(  # noqa: C901
     return issue_id, summary, description, url_val, assignee_text, status_text, author_text
 
 
-def _unwrap_issue(payload: Mapping[str, object]) -> Mapping[str, object]:
-    """Повертає вкладений опис задачі з payload або сам payload."""
-    issue_obj: object | None = payload.get('issue')
-    if isinstance(issue_obj, Mapping):
-        return issue_obj
-    return payload
-
-
 def _build_issue_url(issue_id: str) -> str:
     """Формує URL задачі або повертає повідомлення про його відсутність."""
     if YT_BASE_URL and issue_id and issue_id != render(Msg.YT_ISSUE_NO_ID):
@@ -341,10 +335,11 @@ handle_reconnect_shortcut = telegram_commands.handle_reconnect_shortcut
 @app.post('/youtrack')
 async def youtrack_webhook(request: Request) -> dict[str, bool]:  # noqa: C901
     """Обробляє вебхук від YouTrack та повідомляє Telegram."""
-    payload: Any = await request.json()
-
-    if not isinstance(payload, dict):
-        raise HTTPException(status_code=400, detail='Некоректний формат тіла запиту')
+    payload_raw: Any = await request.json()
+    try:
+        payload_model = YouTrackWebhookPayload.model_validate(payload_raw)
+    except ValidationError as exc:
+        raise HTTPException(status_code=400, detail='Некоректний формат тіла запиту') from exc
 
     if YT_WEBHOOK_SECRET is not None:
         auth_header: str | None = request.headers.get('Authorization')
@@ -353,8 +348,7 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:  # noqa: C901
             logger.warning('Невірний секрет YouTrack вебхука')
             raise HTTPException(status_code=403, detail='Доступ заборонено')
 
-    issue_candidate: object | None = payload.get('issue')
-    issue: Mapping[str, object] = issue_candidate if isinstance(issue_candidate, dict) else payload
+    issue: Mapping[str, object] = payload_model.issue_mapping()
 
     issue_id, summary, description, url_val, assignee_text, status_text, author_text = _prepare_issue_payload(issue)
     internal_id_obj: object | None = issue.get('id')
@@ -362,7 +356,7 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:  # noqa: C901
     if summary == render(Msg.YT_EMAIL_SUBJECT_MISSING):
         await asyncio.to_thread(ensure_summary_placeholder, issue_id, summary, internal_id)
 
-    payload_for_logging = _prepare_payload_for_logging(payload)
+    payload_for_logging = _prepare_payload_for_logging(payload_model.model_dump(mode='python'))
     logger.info('Отримано вебхук YouTrack: %s', _build_log_entry(payload_for_logging))
 
     telegram_msg: str = format_telegram_message(
@@ -399,10 +393,11 @@ async def youtrack_webhook(request: Request) -> dict[str, bool]:  # noqa: C901
 @app.post('/youtrack/update')
 async def youtrack_update(request: Request) -> dict[str, bool]:  # noqa: C901
     """Оновлює наявне повідомлення Telegram після змін у задачі YouTrack."""
-    payload: Any = await request.json()
-
-    if not isinstance(payload, dict):
-        raise HTTPException(status_code=400, detail='Некоректний формат тіла запиту')
+    payload_raw: Any = await request.json()
+    try:
+        payload_model = YouTrackUpdatePayload.model_validate(payload_raw)
+    except ValidationError as exc:
+        raise HTTPException(status_code=400, detail='Некоректний формат тіла запиту') from exc
 
     if YT_WEBHOOK_SECRET is not None:
         auth_header: str | None = request.headers.get('Authorization')
@@ -411,15 +406,10 @@ async def youtrack_update(request: Request) -> dict[str, bool]:  # noqa: C901
             logger.warning('Невірний секрет YouTrack вебхука (update)')
             raise HTTPException(status_code=403, detail='Доступ заборонено')
 
-    issue_mapping: Mapping[str, object] = _unwrap_issue(payload)
+    issue_mapping: Mapping[str, object] = payload_model.issue_mapping()
     issue_id: str = extract_issue_id(issue_mapping)
 
-    changes_raw: object | None = payload.get('changes')
-    changes_list: list[str] = (
-        [str(item) for item in changes_raw if isinstance(item, str)]
-        if isinstance(changes_raw, list)
-        else []
-    )
+    changes_list: list[str] = payload_model.changes or []
     changes_text: str = ', '.join(changes_list) if changes_list else 'невідомі поля'
 
     logger.info('Оновлення задачі %s через update вебхук (зміни: %s)', issue_id, changes_text)
@@ -463,7 +453,7 @@ async def youtrack_update(request: Request) -> dict[str, bool]:  # noqa: C901
     url_val: str = get_str(issue_mapping, 'url') or _build_issue_url(issue_id)
     await cancel_new_status_alerts(issue_id, status_text)
 
-    payload_for_logging = _prepare_payload_for_logging(payload)
+    payload_for_logging = _prepare_payload_for_logging(payload_model.model_dump(mode='python'))
     logger.debug('Параметри update вебхука: %s', payload_for_logging)
 
     record = await asyncio.to_thread(fetch_issue_message, issue_id)
