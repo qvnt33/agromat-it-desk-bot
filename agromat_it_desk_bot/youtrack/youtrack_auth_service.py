@@ -1,4 +1,4 @@
-"""Надає допоміжні функції для авторизації користувачів через YouTrack."""
+"""Provide helper functions for user authorization via YouTrack."""
 
 from __future__ import annotations
 
@@ -26,19 +26,19 @@ _TEAM_FIELDS: str = 'users(id,login),memberships(user(id,login))'
 
 
 class TemporaryYouTrackError(RuntimeError):
-    """Позначає тимчасову недоступність YouTrack API."""
+    """Indicate temporary unavailability of YouTrack API."""
 
 
 class InvalidTokenError(RuntimeError):
-    """Позначає, що наданий токен некоректний або відкликаний."""
+    """Indicate that provided token is invalid or revoked."""
 
 
 def validate_token(token: str) -> tuple[bool, dict[str, object]]:
-    """Перевіряє персональний токен YouTrack та повертає інформацію про користувача.
+    """Validate personal YouTrack token and return user info.
 
-    :param token: Персональний токен користувача.
-    :returns: Пару ``(is_valid, payload)``.
-    :raises TemporaryYouTrackError: Якщо YouTrack тимчасово недоступний.
+    :param token: Personal user token.
+    :returns: Pair ``(is_valid, payload)``.
+    :raises TemporaryYouTrackError: If YouTrack is temporarily unavailable.
     """
     normalized: str = token.strip()
     if not normalized:
@@ -92,13 +92,13 @@ def validate_token(token: str) -> tuple[bool, dict[str, object]]:
 
 
 def is_member_of_project(yt_user_id: str, project_identifier: str | None = None) -> bool:
-    """Перевіряє, чи належить користувач до заданого проєкту YouTrack.
+    """Check whether user belongs to given YouTrack project.
 
-    :param yt_user_id: Ідентифікатор користувача YouTrack.
-    :param project_identifier: Ідентифікатор чи ключ проєкту (опційно).
-    :returns: ``True`` якщо користувач входить до команди проєкту.
-    :raises TemporaryYouTrackError: Якщо YouTrack тимчасово недоступний.
-    :raises RuntimeError: Якщо конфігурацію проєкту не налаштовано.
+    :param yt_user_id: YouTrack user identifier.
+    :param project_identifier: Project ID or key (optional).
+    :returns: ``True`` if user is in project team.
+    :raises TemporaryYouTrackError: If YouTrack temporarily unavailable.
+    :raises RuntimeError: If project configuration is missing.
     """
     project_ref: str | None = project_identifier or PROJECT_ID or PROJECT_KEY
     if not project_ref:
@@ -142,11 +142,11 @@ def is_member_of_project(yt_user_id: str, project_identifier: str | None = None)
 
 
 def normalize_user(payload: Mapping[str, object]) -> tuple[str, str | None, str]:
-    """Витягує логін, email та ідентифікатор користувача зі відповіді YouTrack.
+    """Extract login, email, and user ID from YouTrack response.
 
-    :param payload: Дані користувача з ``/api/users/me``.
-    :returns: Пару ``(login, email, yt_user_id)``.
-    :raises InvalidTokenError: Якщо дані неповні.
+    :param payload: User data from ``/api/users/me``.
+    :returns: Tuple ``(login, email, yt_user_id)``.
+    :raises InvalidTokenError: If data is incomplete.
     """
     login: str | None = _extract_string(
         payload,
@@ -183,7 +183,7 @@ def normalize_user(payload: Mapping[str, object]) -> tuple[str, str | None, str]
 
 
 def _service_headers() -> dict[str, str]:
-    """Повертає заголовки для службових запитів YouTrack."""
+    """Return headers for service YouTrack requests."""
     if not YT_TOKEN:
         raise RuntimeError('YT_TOKEN не налаштовано для сервісних викликів')
     return {
@@ -194,7 +194,7 @@ def _service_headers() -> dict[str, str]:
 
 
 def _team_contains_user(team: Mapping[str, object], yt_user_id: str) -> bool:
-    """Перевіряє, чи присутній користувач у складі однієї команди."""
+    """Check whether user exists in a single team entry."""
     memberships: Iterable[object] = _as_iterable(team.get('memberships'))
     if _entries_contain_user(memberships, yt_user_id, key='user'):
         return True
@@ -203,7 +203,7 @@ def _team_contains_user(team: Mapping[str, object], yt_user_id: str) -> bool:
 
 
 def _entries_contain_user(entries: Iterable[object], yt_user_id: str, *, key: str | None = None) -> bool:
-    """Шукає користувача у переданій послідовності записів."""
+    """Search for user in provided sequence of records."""
     for entry in entries:
         if not isinstance(entry, Mapping):
             continue
@@ -214,7 +214,7 @@ def _entries_contain_user(entries: Iterable[object], yt_user_id: str, *, key: st
 
 
 def _as_iterable(value: object) -> Iterable[object]:
-    """Повертає значення як ітеративну послідовність."""
+    """Return value as iterable sequence."""
     if isinstance(value, list):
         return value
     if value is None:
@@ -223,7 +223,7 @@ def _as_iterable(value: object) -> Iterable[object]:
 
 
 def _extract_string(source: Mapping[str, object], *keys: str) -> str | None:
-    """Повертає перший непорожній рядок з переданих ключів."""
+    """Return first non-empty string among provided keys."""
     for key in keys:
         candidate: object | None = source.get(key)
         if isinstance(candidate, str):
@@ -234,6 +234,6 @@ def _extract_string(source: Mapping[str, object], *keys: str) -> str | None:
 
 
 def _maybe_wait(attempt: int) -> None:
-    """Додає експоненційний backoff між повторними спробами."""
+    """Add exponential backoff between retries."""
     delay: float = min(5.0, 0.5 * (2 ** (attempt - 1)))
     time.sleep(delay)

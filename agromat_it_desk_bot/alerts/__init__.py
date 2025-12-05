@@ -1,4 +1,4 @@
-"""Модулі для відкладених та сервісних сповіщень."""
+"""Modules for deferred and service notifications."""
 
 from __future__ import annotations
 

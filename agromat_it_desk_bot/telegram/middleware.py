@@ -1,4 +1,4 @@
-"""Містить Aiogram middleware для перевірки авторизації користувачів."""
+"""Contains Aiogram middleware for user authorization checks."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from agromat_it_desk_bot.telegram.telegram_commands import notify_authorization_
 
 
 class AuthorizationMiddleware(BaseMiddleware):
-    """Перевіряє, чи має користувач активований доступ до бота."""
+    """Check whether user has activated bot access."""
 
     def __init__(self, allowed_commands: set[str] | None = None) -> None:
         self._allowed_commands: set[str] = {command.lower() for command in (allowed_commands or set())}
@@ -47,7 +47,7 @@ class AuthorizationMiddleware(BaseMiddleware):
 
 
 def _extract_command(text: str | None) -> str | None:
-    """Повертає команду з повідомлення або ``None``."""
+    """Return command from message or ``None``."""
     if not text or not text.startswith('/'):
         return None
     token: str = text.split(maxsplit=1)[0]

@@ -1,4 +1,4 @@
-"""Реалізує бізнес-логіку Telegram команд для бота."""
+"""Implement business logic of Telegram commands for the bot."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ CALLBACK_UNLINK_NO: str = 'unlink:no'
 
 
 class PendingTokenUpdate(NamedTuple):
-    """Зберігає дані про запит на оновлення токена."""
+    """Store data about a pending token update request."""
 
     chat_id: int
     token: str
@@ -59,7 +59,7 @@ __all__ = [
 
 
 def configure_sender(sender: TelegramSender) -> None:
-    """Налаштовує TelegramSender для всіх команд."""
+    """Configure TelegramSender for all commands."""
     telegram_context.set_sender(sender)
 
 
@@ -68,10 +68,10 @@ def _require_sender() -> TelegramSender:
 
 
 async def handle_start_command(chat_id: int, message: Mapping[str, object]) -> None:
-    """Визначає статус користувача та надсилає інструкцію підключення.
+    """Determine user status and send connection instructions.
 
-    :param chat_id: Ідентифікатор чату Telegram.
-    :param message: Повідомлення Telegram у вигляді словника.
+    :param chat_id: Telegram chat identifier.
+    :param message: Telegram message as dict.
     """
     tg_user_id = _extract_user_id(message)
     if tg_user_id is None:
@@ -97,11 +97,11 @@ async def handle_start_command(chat_id: int, message: Mapping[str, object]) -> N
 
 
 async def handle_connect_command(chat_id: int, message: Mapping[str, object], text: str) -> None:
-    """Приймає токен з команди ``/connect`` та виконує підключення чи оновлення.
+    """Accept token from ``/connect`` command and link or update.
 
-    :param chat_id: Ідентифікатор чату Telegram.
-    :param message: Повідомлення Telegram у вигляді словника.
-    :param text: Повний текст команди.
+    :param chat_id: Telegram chat identifier.
+    :param message: Telegram message as dict.
+    :param text: Full command text.
     """
     tg_user_id = _extract_user_id(message)
     if tg_user_id is None:
@@ -122,15 +122,15 @@ async def handle_connect_command(chat_id: int, message: Mapping[str, object], te
 
 
 async def handle_reconnect_shortcut(chat_id: int) -> None:
-    """Пояснює, як оновити токен після натискання кнопки у ``/start``.
+    """Explain how to update token after pressing button in ``/start``.
 
-    :param chat_id: Ідентифікатор чату Telegram.
+    :param chat_id: Telegram chat identifier.
     """
     await _reply(chat_id, render(Msg.CONNECT_SHORTCUT_PROMPT))
 
 
 async def handle_unlink_decision(chat_id: int, message_id: int, tg_user_id: int, accept: bool) -> bool:
-    """Опрацьовує підтвердження або скасування відʼєднання."""
+    """Process confirmation or cancellation of unlink."""
     await _delete_message(chat_id, message_id)
 
     authorized: bool = await asyncio.to_thread(is_authorized, tg_user_id)
@@ -147,11 +147,11 @@ async def handle_unlink_decision(chat_id: int, message_id: int, tg_user_id: int,
 
 
 async def handle_confirm_reconnect(chat_id: int, message_id: int, tg_user_id: int, accept: bool) -> bool:
-    """Обробляє вибір з inline-кнопок підтвердження оновлення токена.
+    """Handle inline choice to confirm or cancel token update.
 
-    :param tg_user_id: Ідентифікатор користувача Telegram.
-    :param accept: ``True`` якщо користувач підтвердив оновлення.
-    :returns: ``True``, якщо callback розпізнано.
+    :param tg_user_id: Telegram user identifier.
+    :param accept: ``True`` if user confirmed update.
+    :returns: ``True`` if callback recognized.
     """
     await _delete_message(chat_id, message_id)
 
@@ -169,10 +169,10 @@ async def handle_confirm_reconnect(chat_id: int, message_id: int, tg_user_id: in
 
 
 async def handle_unlink_command(chat_id: int, message: Mapping[str, object]) -> None:
-    """Запитує підтвердження на відʼєднання користувача.
+    """Request confirmation to unlink user.
 
-    :param chat_id: Ідентифікатор чату.
-    :param message: Повідомлення Telegram.
+    :param chat_id: Chat identifier.
+    :param message: Telegram message.
     """
     tg_user_id = _extract_user_id(message)
     if tg_user_id is None:
@@ -196,12 +196,12 @@ async def handle_unlink_command(chat_id: int, message: Mapping[str, object]) -> 
 
 
 async def handle_token_submission(chat_id: int, message: Mapping[str, object], text: str) -> bool:
-    """Реагує на приватне повідомлення, підказуючи формат команди.
+    """Respond to private message, hinting command format.
 
-    :param chat_id: Ідентифікатор чату.
-    :param message: Повідомлення Telegram.
-    :param text: Текст повідомлення без команд.
-    :returns: ``True`` якщо повідомлення оброблено.
+    :param chat_id: Chat identifier.
+    :param message: Telegram message.
+    :param text: Message text without commands.
+    :returns: ``True`` if handled.
     """
     candidate: str = text.strip()
     if not candidate or candidate.startswith('/'):
@@ -223,15 +223,15 @@ async def handle_token_submission(chat_id: int, message: Mapping[str, object], t
 
 
 async def notify_authorization_required(chat_id: int) -> None:
-    """Повідомляє про потребу підключити бота перед використанням команди.
+    """Notify that bot must be linked before using command.
 
-    :param chat_id: Ідентифікатор чату.
+    :param chat_id: Chat identifier.
     """
     await _reply(chat_id, render(Msg.AUTH_REQUIRED))
 
 
 async def _prepare_token_update(chat_id: int, tg_user_id: int, token: str) -> None:
-    """Готує підтвердження оновлення токена."""
+    """Prepare token update confirmation."""
     login, email, _ = await asyncio.to_thread(get_authorized_yt_user, tg_user_id)
     pending_token_updates[tg_user_id] = PendingTokenUpdate(chat_id=chat_id, token=token)
     await _reply(
@@ -246,7 +246,7 @@ async def _prepare_token_update(chat_id: int, tg_user_id: int, token: str) -> No
 
 
 async def _complete_registration(chat_id: int, tg_user_id: int, token: str, success_msg: Msg) -> None:
-    """Виконує реєстрацію токена та надсилає результат користувачу."""
+    """Perform token registration and send result to user."""
     try:
         outcome: RegistrationOutcome = await asyncio.to_thread(register_user, tg_user_id, token)
     except RegistrationError as err:
@@ -274,7 +274,7 @@ async def _complete_registration(chat_id: int, tg_user_id: int, token: str, succ
 
 
 async def _delete_message(chat_id: int, message_id: int) -> None:
-    """Видаляє повідомлення з підтвердженням, ігноруючи помилки."""
+    """Delete confirmation message, ignoring errors."""
     sender = _require_sender()
     try:
         await sender.delete_message(chat_id, message_id)
@@ -283,7 +283,7 @@ async def _delete_message(chat_id: int, message_id: int) -> None:
 
 
 def _confirm_keyboard() -> dict[str, object]:
-    """Створює inline-клавіатуру для підтвердження оновлення токена."""
+    """Create inline keyboard for token update confirmation."""
     return {
         'inline_keyboard': [
             [
@@ -295,7 +295,7 @@ def _confirm_keyboard() -> dict[str, object]:
 
 
 def _extract_token_argument(text: str | None) -> str | None:
-    """Повертає токен з тексту команди або ``None``."""
+    """Return token from command text or ``None``."""
     if not text:
         return None
     parts: list[str] = text.split(maxsplit=1)
@@ -312,7 +312,7 @@ async def _reply(
     reply_markup: dict[str, object] | None = None,
     parse_mode: str | None = 'HTML',
 ) -> None:
-    """Надсилає повідомлення користувачу."""
+    """Send message to user."""
     sender = _require_sender()
     await sender.send_message(
         chat_id,
@@ -323,7 +323,7 @@ async def _reply(
 
 
 def _extract_user_id(message: Mapping[str, object]) -> int | None:
-    """Повертає ідентифікатор користувача з обʼєкта повідомлення."""
+    """Return user identifier from message object."""
     from_candidate: object | None = message.get('from') or message.get('from_user')
     if isinstance(from_candidate, Mapping):
         user_id_obj: object | None = from_candidate.get('id')
@@ -333,7 +333,7 @@ def _extract_user_id(message: Mapping[str, object]) -> int | None:
 
 
 def _map_registration_error(error: RegistrationError) -> str:
-    """Повертає локалізований текст для помилки реєстрації."""
+    """Return localized text for registration error."""
     message: str = str(error)
     if message == 'YouTrack тимчасово недоступний':
         return render(Msg.AUTH_LINK_TEMPORARY)

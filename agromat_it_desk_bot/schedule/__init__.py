@@ -1,4 +1,4 @@
-"""Публікація щотижневого розкладу у Telegram."""
+"""Publish weekly schedule to Telegram."""
 
 from __future__ import annotations
 

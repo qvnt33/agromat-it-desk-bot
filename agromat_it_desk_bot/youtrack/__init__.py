@@ -1,4 +1,4 @@
-"""Пакет з клієнтом та сервісами YouTrack."""
+"""Package with YouTrack client and services."""
 
 from __future__ import annotations
 

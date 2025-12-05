@@ -29,10 +29,12 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 def create_app() -> FastAPI:
     """Builds FastAPI app with routers and lifespan attached."""
-    configure_logging()
+    configure_logging()  # logging setup at process start
+
     app = FastAPI(lifespan=_lifespan)
-    app.include_router(youtrack_router)
-    app.include_router(telegram_router)
+    app.include_router(youtrack_router)  # YouTrack webhooks
+    app.include_router(telegram_router)  # Telegram webhooks
+
     return app
 
 
@@ -42,18 +44,22 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     if not BOT_TOKEN:
         raise RuntimeError('BOT_TOKEN не налаштовано')
 
-    bot: Bot = Bot(token=BOT_TOKEN)
+    bot: Bot = Bot(token=BOT_TOKEN)  # shared bot instance
     dispatcher: Dispatcher = Dispatcher()
-    sender = AiogramTelegramSender(bot)
+    sender = AiogramTelegramSender(bot)  # transport wrapper with retries
     telegram_commands.configure_sender(sender)
     telegram_aiogram.configure(bot, dispatcher)
+
     schedule_publisher: SchedulePublisher | None = build_schedule_publisher(sender)
+
     if schedule_publisher is not None:
         schedule_publisher.start()
     daily_reminder: DailyReminder | None = build_daily_reminder(sender)
+
     if daily_reminder is not None:
         daily_reminder.start()
     status_alert_worker = build_new_status_alert_worker(sender)
+
     if status_alert_worker is not None:
         status_alert_worker.start()
     issue_archiver = IssueArchiverWorker(sender)

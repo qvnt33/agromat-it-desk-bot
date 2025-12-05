@@ -1,4 +1,4 @@
-"""Керує нагадуваннями для заявок, що довго залишаються у статусі ``Нова``."""
+"""Manage reminders for issues staying long in ``New`` status."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ async def schedule_new_status_alerts(
     chat_id: int | str,
     message_id: int,
 ) -> None:
-    """Створює відкладені сповіщення, якщо задача у статусі ``Нова``."""
+    """Create scheduled alerts if issue is in ``New`` status."""
     if not _ALERT_ENABLED:
         return
     if not issue_id or not _is_target_status(status):
@@ -56,7 +56,7 @@ async def schedule_new_status_alerts(
 
 
 async def cancel_new_status_alerts(issue_id: str, status: str | None) -> None:
-    """Скасовує сповіщення, якщо статус відрізняється від ``Нова``."""
+    """Cancel alerts if status differs from ``New``."""
     if not _ALERT_ENABLED or not issue_id or status is None:
         return
     if _is_target_status(status):
@@ -65,14 +65,14 @@ async def cancel_new_status_alerts(issue_id: str, status: str | None) -> None:
 
 
 def build_new_status_alert_worker(sender: TelegramSender) -> NewStatusAlertWorker | None:
-    """Повертає воркер для надсилання сповіщень, якщо це дозволено."""
+    """Return worker for sending alerts if enabled."""
     if not _ALERT_ENABLED:
         return None
     return NewStatusAlertWorker(sender)
 
 
 class NewStatusAlertWorker:
-    """Періодично перевіряє та надсилає нагадування про статус ``Нова``."""
+    """Periodically check and send reminders about ``New`` status."""
 
     def __init__(
         self,
@@ -145,7 +145,7 @@ def _resolve_chat_id(value: str) -> int | str:
 
 
 def _sanitize_alert_text(text: str) -> str:
-    """Перетворює `br` на перенос рядка для підтримки parse_mode=HTML."""
+    """Replace `br` with newline to support parse_mode=HTML."""
     return text.replace('<br/>', '\n').replace('<br>', '\n')
 
 

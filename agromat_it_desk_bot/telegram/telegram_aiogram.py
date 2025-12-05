@@ -1,4 +1,4 @@
-"""Налаштовує Aiogram роутер для обробки Telegram команд."""
+"""Configure Aiogram router to handle Telegram commands."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ _router_registered: bool = False
 
 
 def configure(bot: Bot, dispatcher: Dispatcher) -> None:
-    """Зберігає Bot та Dispatcher, привʼязує router."""
+    """Store Bot and Dispatcher, attach router."""
     global _bot, _dispatcher, _router_registered
     _bot = bot
     _dispatcher = dispatcher
@@ -49,7 +49,7 @@ def configure(bot: Bot, dispatcher: Dispatcher) -> None:
 
 
 async def process_update(payload: dict[str, Any]) -> None:
-    """Передає webhook-оновлення у Dispatcher Aiogram."""
+    """Pass webhook update to Aiogram Dispatcher."""
     if _dispatcher is None or _bot is None:
         raise RuntimeError('Aiogram бот не сконфігурований')
     update: Update = Update.model_validate(payload)
@@ -60,14 +60,14 @@ async def process_update(payload: dict[str, Any]) -> None:
 
 
 async def shutdown() -> None:
-    """Закриває HTTP-сесію бота (для graceful shutdown)."""
+    """Close bot HTTP session (graceful shutdown)."""
     if _bot is not None:
         await _bot.session.close()
         logger.debug('HTTP-сесію бота Aiogram закрито')
 
 
 async def _on_start(message: Message) -> None:
-    """Надсилає інструкцію для команди /start."""
+    """Send instructions for /start command."""
     chat_id: int | None = message.chat.id if message.chat else None
     if chat_id is None:
         logger.debug('Невідомий chat_id для /start: %s', message.model_dump(mode='python'))
@@ -77,7 +77,7 @@ async def _on_start(message: Message) -> None:
 
 
 async def _on_connect(message: Message) -> None:
-    """Обробляє команду /connect."""
+    """Handle /connect command."""
     chat_id: int | None = message.chat.id if message.chat else None
     text: str | None = message.text
     if chat_id is None or text is None:
@@ -88,7 +88,7 @@ async def _on_connect(message: Message) -> None:
 
 
 async def _on_unlink(message: Message) -> None:
-    """Обробляє команду /unlink."""
+    """Handle /unlink command."""
     chat_id: int | None = message.chat.id if message.chat else None
     if chat_id is None:
         logger.debug('Пропущено /unlink: chat_id=%s', chat_id)
@@ -98,7 +98,7 @@ async def _on_unlink(message: Message) -> None:
 
 
 async def _on_text(message: Message) -> None:
-    """Розглядає повідомлення як токен або надсилає підказку."""
+    """Treat message as token or send a hint."""
     chat_id: int | None = message.chat.id if message.chat else None
     text: str | None = message.text
     if chat_id is None or text is None:
@@ -110,7 +110,7 @@ async def _on_text(message: Message) -> None:
 
 
 async def _on_reconnect_shortcut_callback(query: CallbackQuery) -> None:
-    """Обробляє кнопку швидкого переходу до оновлення токена."""
+    """Handle quick reconnect button for token update."""
     callback_message: Message | InaccessibleMessage | None = query.message
     if not isinstance(callback_message, Message) or callback_message.chat is None:
         logger.debug('Пропущено reconnect:start без повідомлення: %s', query.model_dump(mode='python'))
@@ -123,7 +123,7 @@ async def _on_reconnect_shortcut_callback(query: CallbackQuery) -> None:
 
 
 async def _process_confirm_callback(query: CallbackQuery, accept: bool) -> None:
-    """Обробляє підтвердження або скасування оновлення токена."""
+    """Handle confirmation or cancellation of token update."""
     callback_message: Message | InaccessibleMessage | None = query.message
     tg_user_id: int | None = query.from_user.id if query.from_user else None
     if tg_user_id is None or not isinstance(callback_message, Message) or callback_message.chat is None:
@@ -145,22 +145,22 @@ async def _process_confirm_callback(query: CallbackQuery, accept: bool) -> None:
 
 
 async def _on_confirm_yes(query: CallbackQuery) -> None:
-    """Підтверджує оновлення токена."""
+    """Confirm token update."""
     await _process_confirm_callback(query, True)
 
 
 async def _on_confirm_no(query: CallbackQuery) -> None:
-    """Скасовує оновлення токена."""
+    """Cancel token update."""
     await _process_confirm_callback(query, False)
 
 
 async def _on_unlink_yes(query: CallbackQuery) -> None:
-    """Підтверджує відʼєднання поточного акаунта."""
+    """Confirm unlink of current account."""
     await _process_unlink_callback(query, True)
 
 
 async def _on_unlink_no(query: CallbackQuery) -> None:
-    """Скасовує відʼєднання."""
+    """Cancel unlink."""
     await _process_unlink_callback(query, False)
 
 
@@ -185,7 +185,7 @@ async def _process_unlink_callback(query: CallbackQuery, accept: bool) -> None:
 
 
 async def _on_accept_issue_callback(query: CallbackQuery) -> None:
-    """Обробляє callback натискання кнопки прийняття задачі."""
+    """Handle callback of pressing accept issue button."""
     from agromat_it_desk_bot import callback_handlers
 
     callback_message: Message | InaccessibleMessage | None = query.message

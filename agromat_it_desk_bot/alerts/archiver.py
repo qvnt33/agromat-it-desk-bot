@@ -1,4 +1,4 @@
-"""Періодично архівує неактивні заявки в Telegram."""
+"""Periodically archives inactive issues in Telegram."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 class IssueArchiverWorker:
-    """Шукає повідомлення, які потрібно перевести у статус «Архівовано»."""
+    """Find messages that should be marked as archived."""
 
     def __init__(self, sender: TelegramSender) -> None:
         self._sender = sender

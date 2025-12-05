@@ -1,4 +1,4 @@
-"""Пакет із підтримкою інтеграції Telegram."""
+"""Package providing Telegram integration."""
 
 from __future__ import annotations
 

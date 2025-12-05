@@ -51,6 +51,10 @@ class Msg(str, Enum):
     UNLINK_CANCELLED = 'unlink.cancelled'
     SCHEDULE_WEEKLY_BODY = 'schedule.weekly_body'
     SCHEDULE_DAILY_ENTRY = 'schedule.daily_entry'
+    SCHEDULE_WEEKDAY_HEADER = 'schedule.weekday_header'
+    SCHEDULE_WEEKEND_HEADER = 'schedule.weekend_header'
+    SCHEDULE_DAY_LINE = 'schedule.day_line'
+    SCHEDULE_SUBJECT_PLACEHOLDER = 'schedule.subject_placeholder'
 
     # Errors and warnings
     ERR_TG_ID_UNAVAILABLE = 'err.tg_id_unavailable'

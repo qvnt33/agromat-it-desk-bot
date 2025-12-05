@@ -9,9 +9,9 @@ _LOCALES: dict[str, Mapping[Msg, str]] = {'uk': UK}
 
 
 def get_catalog(locale: str) -> Mapping[Msg, str]:
-    """Повертає каталог повідомлень для заданої локалі.
+    """Returns the message directory for the given locale.
 
-    :param locale: Ідентифікатор локалі.
-    :returns: Мапу ключів ``Msg`` на шаблони для вибраної локалі або ``UK``.
+    :param locale: Locale identifier.
+    :returns: Map of ``Msg`` keys to templates for the selected locale or ``UK``.
     """
     return _LOCALES.get(locale, UK)

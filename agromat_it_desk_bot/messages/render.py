@@ -1,4 +1,4 @@
-"""Рендерить локалізовані повідомлення із суворою валідацією."""
+"""Render localized messages with strict validation."""
 
 from __future__ import annotations
 
@@ -10,10 +10,10 @@ from .locales import get_catalog
 
 
 def _extract_fields(template: str) -> set[str]:
-    """Збирає всі плейсхолдери з шаблону.
+    """Collect all placeholders from template.
 
-    :param template: Рядок із плейсхолдерами ``{name}``.
-    :returns: Набір назв плейсхолдерів.
+    :param template: String with placeholders ``{name}``.
+    :returns: Set of placeholder names.
     """
     fields: set[str] = set()
     for _, field_name, _, _ in Formatter().parse(template):
@@ -23,14 +23,14 @@ def _extract_fields(template: str) -> set[str]:
 
 
 def render(msg: Msg, /, *, locale: str = 'uk', **params: Any) -> str:
-    """Форматує повідомлення з жорсткою перевіркою параметрів.
+    """Format message with strict parameter validation.
 
-    :param msg: Ключ повідомлення у переліку ``Msg``.
-    :param locale: Цільова локаль (поки підтримується ``'uk'``).
-    :param params: Іменовані параметри для підстановки.
-    :raises KeyError: якщо бракує обов'язкових плейсхолдерів.
-    :raises ValueError: якщо передано зайві параметри.
-    :returns: Відформатований текст повідомлення.
+    :param msg: Message key in ``Msg`` enum.
+    :param locale: Target locale (currently ``'uk'``).
+    :param params: Named parameters for substitution.
+    :raises KeyError: if required placeholders are missing.
+    :raises ValueError: if extra parameters are provided.
+    :returns: Formatted message text.
     """
     try:
         template: str = get_catalog(locale)[msg]

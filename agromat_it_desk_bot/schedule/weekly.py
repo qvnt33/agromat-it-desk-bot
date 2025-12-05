@@ -125,7 +125,10 @@ class ExchangeScheduleClient:
                 if categories_raw
                 else ()
             )
-            shifts.append(ShiftEntry(subject=subject or 'Без назви', start=start_dt, end=end_dt, categories=categories))
+            shifts.append(ShiftEntry(subject=subject or 'Без назви',
+            start=start_dt,
+            end=end_dt,
+            categories=categories))
         return shifts
 
     def _build_account(
@@ -257,7 +260,9 @@ class SchedulePublisher:
     def _resolve_week_range(self) -> tuple[datetime, datetime]:
         now = datetime.now(tz=self._tz)
         days_until_monday = (7 - now.weekday()) % 7
-        monday = datetime.combine((now + timedelta(days=days_until_monday)).date(), time(0, 0), tzinfo=self._tz)
+        monday = datetime.combine((now + timedelta(days=days_until_monday)).date(),
+        time(0, 0),
+        tzinfo=self._tz)
         end = monday + timedelta(days=7)
         return monday, end
 
@@ -288,12 +293,12 @@ class SchedulePublisher:
 
         body_parts: list[str] = []
         if weekday_lines:
-            body_parts.append('🕗 <b>Будні</b>')
+            body_parts.append(render(Msg.SCHEDULE_WEEKDAY_HEADER))
             body_parts.extend(weekday_lines)
             if weekend_lines:
                 body_parts.append('')
         if weekend_lines:
-            body_parts.append('🚨 <b>Вихідні</b>')
+            body_parts.append(render(Msg.SCHEDULE_WEEKEND_HEADER))
             body_parts.extend(weekend_lines)
 
         body: str = '\n'.join(body_parts)
@@ -308,7 +313,7 @@ class SchedulePublisher:
         if not subjects:
             subjects.append(_format_subject(None, ()))
         body = ', '.join(subjects)
-        return f'<b>{weekday} ({day_label}) — </b>{body}'
+        return render(Msg.SCHEDULE_DAY_LINE, weekday=weekday, day=day_label, body=body)
 
 
 class DailyReminder:
@@ -384,7 +389,7 @@ class DailyReminder:
 def _format_subject(name: str | None, _categories: Sequence[str]) -> str:
     text_raw: str = name.strip() if isinstance(name, str) else ''
     if not text_raw:
-        text_raw = 'N/A'
+        text_raw = render(Msg.SCHEDULE_SUBJECT_PLACEHOLDER)
     return f'<code>{escape_html(text_raw)}</code>'
 
 

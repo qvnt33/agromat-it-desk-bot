@@ -1,4 +1,4 @@
-"""Налаштування сервісу: зчитування змінних середовища."""
+"""Service configuration: reading environment variables."""
 
 import os
 from dataclasses import dataclass
@@ -132,7 +132,7 @@ SCHEDULE_DAILY_REMINDER_MINUTE: int = _REMINDER_MINUTE
 
 @dataclass(frozen=True)
 class StatusAlertStep:
-    """Описує відкладене повідомлення про статус ``Нова``."""
+    """Describe deferred message about ``New`` status."""
 
     index: int
     minutes: int

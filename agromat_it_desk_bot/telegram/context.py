@@ -1,4 +1,4 @@
-"""Зберігає спільні залежності Telegram рівня (наприклад, відправник)."""
+"""Store shared Telegram-level dependencies (e.g., sender)."""
 
 from __future__ import annotations
 
@@ -8,13 +8,13 @@ _sender: TelegramSender | None = None
 
 
 def set_sender(sender: TelegramSender) -> None:
-    """Реєструє екземпляр TelegramSender для глобального використання."""
+    """Register TelegramSender instance for global use."""
     global _sender
     _sender = sender
 
 
 def get_sender() -> TelegramSender:
-    """Повертає налаштований TelegramSender."""
+    """Return configured TelegramSender."""
     if _sender is None:
         raise RuntimeError('TelegramSender не налаштовано')
     return _sender

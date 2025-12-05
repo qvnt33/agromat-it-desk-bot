@@ -1,4 +1,4 @@
-"""Містить україномовні шаблони повідомлень."""
+"""Contains Ukrainian message templates."""
 
 from __future__ import annotations
 
@@ -55,6 +55,10 @@ UK: Mapping[Msg, str] = {
     Msg.UNLINK_CANCELLED: '❎ Відʼєднання скасовано.',
     Msg.SCHEDULE_WEEKLY_BODY: '📅 <b>{start}–{end}</b>\n\n{body}',
     Msg.SCHEDULE_DAILY_ENTRY: '🔔 <b>Завтра, {weekday} ({date}):</b> {body}',
+    Msg.SCHEDULE_WEEKDAY_HEADER: '🕗 <b>Будні</b>',
+    Msg.SCHEDULE_WEEKEND_HEADER: '🚨 <b>Вихідні</b>',
+    Msg.SCHEDULE_DAY_LINE: '<b>{weekday} ({day})</b> — {body}',
+    Msg.SCHEDULE_SUBJECT_PLACEHOLDER: 'N/A',
 
     Msg.AUTH_LINK_TEMPORARY: '⚠️ YouTrack зараз недоступний. Спробуй трохи пізніше.',
     Msg.AUTH_LINK_CONFIG: '⚙️ Помилка конфігурації сервера.',

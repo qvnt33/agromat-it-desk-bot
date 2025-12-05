@@ -1,4 +1,4 @@
-"""Містить інтерфейс та реалізацію асинхронного відправника Telegram."""
+"""Contains interface and implementation of async Telegram sender."""
 
 from __future__ import annotations
 
@@ -14,13 +14,13 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 def escape_html(text: str) -> str:
-    """Безпечно екранує текст для HTML parse_mode."""
+    """Safely escape text for HTML parse_mode."""
     return escape(text, quote=False)
 
 
 @runtime_checkable
 class TelegramSender(Protocol):
-    """Описує очікуваний контракт взаємодії з Telegram Bot API."""
+    """Describe expected contract for Telegram Bot API interaction."""
 
     async def send_message(
         self,
@@ -71,7 +71,7 @@ class TelegramSender(Protocol):
 
 
 class AiogramTelegramSender:
-    """Реалізація TelegramSender поверх aiogram.Bot з підтримкою Retry-After."""
+    """TelegramSender implementation over aiogram.Bot with Retry-After support."""
 
     def __init__(
         self,
