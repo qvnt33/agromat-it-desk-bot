@@ -140,7 +140,8 @@ class StatusAlertStep:
 
 
 def _load_alert_minutes() -> tuple[int, ...]:
-    defaults: tuple[int, int, int] = (20, 60, 120)
+    # default alert delays in minutes
+    defaults: tuple[int, int, int] = (1, 2, 3)
     values: list[int] = []
     for position, default in enumerate(defaults, start=1):
         env_name = f'NEW_STATUS_ALERT_MINUTES_{position}'
@@ -148,11 +149,17 @@ def _load_alert_minutes() -> tuple[int, ...]:
     return tuple(values)
 
 
+NEW_STATUS_ALERT_SUFFIX_DEFAULT: str = (os.getenv('NEW_STATUS_ALERT_MESSAGE_SUFFIX') or '').strip()
+NEW_STATUS_ALERT_SUFFIX_ADMIN_ID: int | None = (
+    _env_int(os.getenv('NEW_STATUS_ALERT_SUFFIX_ADMIN_ID'), default=0) or None
+)
+
+
 def _load_alert_messages() -> tuple[str, ...]:
     defaults: tuple[str, str, str] = (
-        '⚠️ Нова заявка очікує на реакцію понад 20 хвилин.',
-        '⚠️ Нова заявка очікує понад 1 годину.',
-        '⚠️ Нова заявка очікує понад 2 години.',
+        '❗Нова заявка без реакції понад <b>20 хвилин</b>.',
+        '⚠️ Нова заявка без реакції понад <b>1 годину</b>!',
+        '📛 Нова заявка без реакції понад <b>2 години</b>!',
     )
     messages: list[str] = []
     for position, default in enumerate(defaults, start=1):
@@ -173,7 +180,7 @@ def _build_alert_steps(minutes: tuple[int, ...], messages: tuple[str, ...]) -> t
     return tuple(steps)
 
 
-NEW_STATUS_ALERT_ENABLED: bool = _env_bool(os.getenv('NEW_STATUS_ALERT_ENABLED'))
+NEW_STATUS_ALERT_ENABLED: bool = True
 NEW_STATUS_ALERT_STATE_NAME: str = os.getenv('NEW_STATUS_STATE_NAME', 'Нова').strip() or 'Нова'
 NEW_STATUS_ALERT_STEPS: tuple[StatusAlertStep, ...] = _build_alert_steps(
     _load_alert_minutes(),

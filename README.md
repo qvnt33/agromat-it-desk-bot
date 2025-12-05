@@ -71,15 +71,15 @@
 ### Контроль статусу «Нова»
 | Змінна                       | Призначення                                                                 |
 |------------------------------|------------------------------------------------------------------------------|
-| `NEW_STATUS_ALERT_ENABLED`   | `true/false`, вмикає нагадування про довгий статус «Нова»                    |
 | `NEW_STATUS_STATE_NAME`      | текст статусу, який вважається «новим» (default: `Нова`)                     |
-| `NEW_STATUS_ALERT_MINUTES_1` | затримка першого пінгу у хвилинах (default: `20`)                            |
-| `NEW_STATUS_ALERT_MINUTES_2` | друга затримка (default: `60`)                                              |
-| `NEW_STATUS_ALERT_MINUTES_3` | третя затримка (default: `120`)                                             |
+| `NEW_STATUS_ALERT_MINUTES_1` | затримка першого пінгу у хвилинах (default: `1`)                             |
+| `NEW_STATUS_ALERT_MINUTES_2` | друга затримка (default: `2`)                                               |
+| `NEW_STATUS_ALERT_MINUTES_3` | третя затримка (default: `3`)                                               |
 | `NEW_STATUS_ALERT_MESSAGE_1` | текст повідомлення через перший таймер                                      |
 | `NEW_STATUS_ALERT_MESSAGE_2` | текст повідомлення через другий таймер                                      |
 | `NEW_STATUS_ALERT_MESSAGE_3` | текст повідомлення через третій таймер                                      |
 | `NEW_STATUS_ALERT_POLL_MINUTES` | як часто перевіряти чергу нагадувань (у хвилинах, default: `1`)          |
+| `NEW_STATUS_ALERT_SUFFIX_ADMIN_ID` | Telegram ID користувача, якому дозволено /setsuffix                    |
 
 Такі нагадування надсилаються як відповіді на початкове повідомлення заявки в Telegram.
 

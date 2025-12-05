@@ -55,6 +55,9 @@ class Msg(str, Enum):
     SCHEDULE_WEEKEND_HEADER = 'schedule.weekend_header'
     SCHEDULE_DAY_LINE = 'schedule.day_line'
     SCHEDULE_SUBJECT_PLACEHOLDER = 'schedule.subject_placeholder'
+    SUFFIX_USAGE = 'suffix.usage'
+    SUFFIX_UPDATED = 'suffix.updated'
+    ERR_COMMAND_UNAVAILABLE = 'err.command_unavailable'
 
     # Errors and warnings
     ERR_TG_ID_UNAVAILABLE = 'err.tg_id_unavailable'

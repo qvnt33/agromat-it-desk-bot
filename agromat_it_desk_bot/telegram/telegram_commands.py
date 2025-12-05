@@ -15,7 +15,9 @@ from agromat_it_desk_bot.auth import (
     is_authorized,
     register_user,
 )
+from agromat_it_desk_bot.config import NEW_STATUS_ALERT_SUFFIX_ADMIN_ID
 from agromat_it_desk_bot.messages import Msg, get_template, render
+from agromat_it_desk_bot.storage import update_alert_suffix
 from agromat_it_desk_bot.telegram import context as telegram_context
 from agromat_it_desk_bot.telegram.telegram_sender import TelegramSender, escape_html
 
@@ -55,6 +57,7 @@ __all__ = [
     'handle_token_submission',
     'notify_authorization_required',
     'configure_sender',
+    'handle_set_suffix_command',
 ]
 
 
@@ -193,6 +196,22 @@ async def handle_unlink_command(chat_id: int, message: Mapping[str, object]) -> 
         ],
     }
     await _reply(chat_id, render(Msg.UNLINK_CONFIRM_PROMPT), reply_markup=keyboard)
+
+
+async def handle_set_suffix_command(chat_id: int, message: Mapping[str, object], text: str) -> None:
+    """Update alert suffix if Telegram user is allowed."""
+    tg_user_id = _extract_user_id(message)
+    if tg_user_id is None or NEW_STATUS_ALERT_SUFFIX_ADMIN_ID is None or tg_user_id != NEW_STATUS_ALERT_SUFFIX_ADMIN_ID:
+        await _reply(chat_id, render(Msg.ERR_COMMAND_UNAVAILABLE))
+        return
+    parts: list[str] = text.split(maxsplit=1)
+    if len(parts) != 2:
+        await _reply(chat_id, render(Msg.SUFFIX_USAGE))
+        return
+    suffix: str = parts[1].strip()
+    await asyncio.to_thread(update_alert_suffix, suffix)
+    escaped: str = escape_html(suffix)
+    await _reply(chat_id, render(Msg.SUFFIX_UPDATED, value=escaped))
 
 
 async def handle_token_submission(chat_id: int, message: Mapping[str, object], text: str) -> bool:

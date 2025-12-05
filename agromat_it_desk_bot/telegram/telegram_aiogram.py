@@ -19,6 +19,7 @@ from agromat_it_desk_bot.telegram.telegram_commands import (
     handle_confirm_reconnect,
     handle_connect_command,
     handle_reconnect_shortcut,
+    handle_set_suffix_command,
     handle_start_command,
     handle_token_submission,
     handle_unlink_command,
@@ -31,7 +32,7 @@ if TYPE_CHECKING:
 logger: logging.Logger = logging.getLogger(__name__)
 
 _router: Router = Router()
-_router.message.middleware(AuthorizationMiddleware({'start', 'connect', 'unlink'}))
+_router.message.middleware(AuthorizationMiddleware({'start', 'connect', 'unlink', 'setsuffix'}))
 _bot: Bot | None = None
 _dispatcher: Dispatcher | None = None
 _router_registered: bool = False
@@ -95,6 +96,17 @@ async def _on_unlink(message: Message) -> None:
         return
     payload: dict[str, object] = message.model_dump(mode='python')
     await handle_unlink_command(chat_id, payload)
+
+
+async def _on_set_suffix(message: Message) -> None:
+    """Handle /setsuffix command."""
+    chat_id: int | None = message.chat.id if message.chat else None
+    text: str | None = message.text
+    if chat_id is None or text is None:
+        logger.debug('Пропущено /setsuffix: chat_id=%s text=%s', chat_id, text)
+        return
+    payload: dict[str, object] = message.model_dump(mode='python')
+    await handle_set_suffix_command(chat_id, payload, text)
 
 
 async def _on_text(message: Message) -> None:
@@ -221,6 +233,7 @@ async def _on_accept_issue_callback(query: CallbackQuery) -> None:
 _router.message(CommandStart())(_on_start)
 _router.message(Command(commands=['connect']))(_on_connect)
 _router.message(Command(commands=['unlink']))(_on_unlink)
+_router.message(Command(commands=['setsuffix']))(_on_set_suffix)
 _router.callback_query(F.data == CALLBACK_RECONNECT_START)(_on_reconnect_shortcut_callback)
 _router.callback_query(F.data == CALLBACK_CONFIRM_YES)(_on_confirm_yes)
 _router.callback_query(F.data == CALLBACK_CONFIRM_NO)(_on_confirm_no)

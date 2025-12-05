@@ -11,27 +11,50 @@ from agromat_it_desk_bot.config import (
     NEW_STATUS_ALERT_POLL_SECONDS,
     NEW_STATUS_ALERT_STATE_NAME,
     NEW_STATUS_ALERT_STEPS,
+    NEW_STATUS_ALERT_SUFFIX_DEFAULT,
 )
 from agromat_it_desk_bot.storage import (
     clear_issue_alerts,
+    fetch_alert_suffix,
     fetch_due_issue_alerts,
     mark_issue_alert_sent,
     upsert_issue_alerts,
 )
-from agromat_it_desk_bot.telegram.telegram_sender import TelegramSender
+from agromat_it_desk_bot.telegram.telegram_sender import TelegramSender, escape_html
 
 logger: logging.Logger = logging.getLogger(__name__)
 
 _ALERT_TARGET: str = NEW_STATUS_ALERT_STATE_NAME.casefold()
 _ALERT_STEPS = NEW_STATUS_ALERT_STEPS
-_ALERT_MESSAGES = {step.index: step.message for step in _ALERT_STEPS}
+_ALERT_BASE_MESSAGES = {step.index: step.message for step in _ALERT_STEPS}
 _ALERT_ENABLED: bool = NEW_STATUS_ALERT_ENABLED and bool(_ALERT_STEPS)
 _POLL_SECONDS: float = max(float(NEW_STATUS_ALERT_POLL_SECONDS), 30.0)
 _BATCH_LIMIT: int = 20
+_SUFFIX_POSITIONS: tuple[int, ...] = (2, 3)
+_ALERT_MESSAGES = _ALERT_BASE_MESSAGES
 
 
 def _is_target_status(status: str | None) -> bool:
     return bool(status and status.strip().casefold() == _ALERT_TARGET)
+
+
+async def _compose_alert_message(alert_index: int) -> str | None:
+    base_messages: dict[int, str] = globals().get('_ALERT_MESSAGES', _ALERT_BASE_MESSAGES)  # allow tests to patch
+    base_message: str | None = base_messages.get(alert_index)
+    if base_message is None:
+        return None
+    try:
+        suffix: str = await asyncio.to_thread(fetch_alert_suffix, NEW_STATUS_ALERT_SUFFIX_DEFAULT)
+    except Exception:
+        suffix = NEW_STATUS_ALERT_SUFFIX_DEFAULT
+    if suffix and alert_index in _SUFFIX_POSITIONS:
+        normalized_suffix: str = suffix.strip()
+        if not normalized_suffix:
+            return base_message
+        trimmed_suffix: str = normalized_suffix.removeprefix('<br><br>')
+        safe_suffix: str = escape_html(trimmed_suffix)
+        return f'{base_message}<br><br>{safe_suffix}'
+    return base_message
 
 
 async def schedule_new_status_alerts(
@@ -117,7 +140,7 @@ class NewStatusAlertWorker:
             await self._send_alert(record['issue_id'], record['alert_index'], record['chat_id'], record['message_id'])
 
     async def _send_alert(self, issue_id: str, alert_index: int, chat_id_raw: str, message_id: int) -> None:
-        message_template: str | None = _ALERT_MESSAGES.get(alert_index)
+        message_template: str | None = await _compose_alert_message(alert_index)
         if not message_template:
             await asyncio.to_thread(mark_issue_alert_sent, issue_id, alert_index)
             return

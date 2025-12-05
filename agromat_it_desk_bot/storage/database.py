@@ -113,6 +113,15 @@ def migrate() -> None:
             ON issue_alerts(send_after)
             """,
         )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """,
+        )
         connection.commit()
         _ensure_columns(connection)
         _ensure_issue_message_columns(connection)
@@ -624,6 +633,66 @@ def mark_issue_archived(issue_id: str) -> None:
         connection.commit()
 
 
+def fetch_setting(key: str) -> str | None:
+    """Return stored setting value by key or ``None``."""
+    with _connect() as connection:
+        cursor = connection.cursor()
+        _ensure_settings_table(cursor)
+        cursor.execute(
+            """
+            SELECT value
+            FROM settings
+            WHERE key = ?
+            LIMIT 1
+            """,
+            (key,),
+        )
+        row = cursor.fetchone()
+        return str(row['value']) if row else None
+
+
+def upsert_setting(key: str, value: str) -> None:
+    """Insert or update setting value."""
+    now: str = _utcnow()
+    with _connect() as connection:
+        cursor = connection.cursor()
+        _ensure_settings_table(cursor)
+        cursor.execute(
+            """
+            INSERT INTO settings(key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+            """,
+            (key, value, now),
+        )
+        connection.commit()
+
+
+def delete_setting(key: str) -> None:
+    """Remove setting by key if exists."""
+    with _connect() as connection:
+        cursor = connection.cursor()
+        _ensure_settings_table(cursor)
+        cursor.execute('DELETE FROM settings WHERE key = ?', (key,))
+        connection.commit()
+
+
+def fetch_alert_suffix(default: str) -> str:
+    """Return alert suffix stored in DB or fallback to ``default``."""
+    stored: str | None = fetch_setting('alert_suffix')
+    if stored is None:
+        return default
+    return stored
+
+
+def update_alert_suffix(value: str) -> None:
+    """Persist alert suffix value."""
+    if value.strip() == '':
+        delete_setting('alert_suffix')
+        return
+    upsert_setting('alert_suffix', value)
+
+
 def _ensure_issue_alerts_table(cursor: sqlite3.Cursor) -> None:
     """Ensure issue_alerts table exists."""
     cursor.execute(
@@ -643,6 +712,19 @@ def _ensure_issue_alerts_table(cursor: sqlite3.Cursor) -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_issue_alerts_due
         ON issue_alerts(send_after)
+        """,
+    )
+
+
+def _ensure_settings_table(cursor: sqlite3.Cursor) -> None:
+    """Ensure settings table exists."""
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
         """,
     )
 
