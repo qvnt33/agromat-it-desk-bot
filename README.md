@@ -1,8 +1,8 @@
-# Agromat IT-Desk Bot
+# Agromat Help Desk Bot
 
 Бот синхронізує YouTrack із Telegram: нові задачі автоматично з’являються у чаті з кнопкою «Прийняти», інженер може призначити себе в один клік, а зміни статусу та виконавця підтягуються, доки заявка не перейде в архів.
 
-![agromat-it-desk-bot](docs/images/agromat_icon_empty.svg)
+![agromat-help-desk-bot](docs/images/agromat_icon_empty.svg)
 
 ---
 
@@ -79,7 +79,7 @@
 | `NEW_STATUS_ALERT_POLL_MINUTES` | як часто перевіряти чергу нагадувань (у хвилинах, default: `1`)          |
 | `NEW_STATUS_ALERT_SUFFIX_ADMIN_ID` | Telegram ID користувача, якому дозволено /setsuffix                    |
 
-Такі нагадування надсилаються як відповіді на початкове повідомлення заявки в Telegram.  
+Такі нагадування надсилаються як відповіді на початкове повідомлення заявки в Telegram.
 Суфікс згадок керується командою `/setsuffix <суфікс>` і доступний лише користувачу з `NEW_STATUS_ALERT_SUFFIX_ADMIN_ID`.
 
 ### Автоархівування повідомлень
@@ -100,7 +100,7 @@
         -d "url=https://<ваш-домен>/telegram" \
         -d "secret_token=$TELEGRAM_WEBHOOK_SECRET"
    ```
-5. Запустіть бекенд (локально `uvicorn ... --reload` або через Docker `docker run -d --env-file .env -p 8080:8080 agromat-it-desk-bot`).
+5. Запустіть бекенд (локально `uvicorn ... --reload` або через Docker `docker run -d --env-file .env -p 8080:8080 agromat-help-desk-bot`).
 6. З Telegram виконайте `/start`, потім `/connect <персональний токен>` і підтвердьте.
 
 ---
@@ -118,5 +118,3 @@
 - `agromat_help_desk_bot/utils.py` – форматування повідомлень та санітайзинг.
 - `youtrack_app/` – скрипти Automation App для YouTrack.
 - `tests/` – unit та інтеграційні тести (використовують тестову SQLite).
-
-> Питання або пропозиції — створюйте issue або пишіть у внутрішній чат команди.
