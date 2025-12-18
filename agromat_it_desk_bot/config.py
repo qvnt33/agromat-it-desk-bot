@@ -76,7 +76,18 @@ YT_TOKEN: str | None = os.getenv('YT_TOKEN')
 PROJECT_KEY: str | None = os.getenv('YT_PROJECT_KEY')
 PROJECT_ID: str | None = os.getenv('YT_PROJECT_ID')
 
-# Path to local user database
+# Database backend selection (mysql|sqlite for testing)
+DATABASE_BACKEND: str = os.getenv('DATABASE_BACKEND', 'mysql').strip().lower() or 'mysql'
+
+# MySQL connection settings
+MYSQL_HOST: str = os.getenv('MYSQL_HOST', 'localhost').strip() or 'localhost'
+MYSQL_PORT: int = int(os.getenv('MYSQL_PORT', '3306'))
+MYSQL_USER: str | None = os.getenv('MYSQL_USER')
+MYSQL_PASSWORD: str | None = os.getenv('MYSQL_PASSWORD')
+MYSQL_DATABASE: str = os.getenv('MYSQL_DATABASE', 'support').strip() or 'support'
+MYSQL_CHARSET: str = os.getenv('MYSQL_CHARSET', 'utf8mb4').strip() or 'utf8mb4'
+
+# Path to local user database (used when DATABASE_BACKEND=sqlite)
 _DATABASE_PATH_ENV: str | None = os.getenv('DATABASE_PATH')
 if _DATABASE_PATH_ENV:
     DATABASE_PATH: Path = Path(_DATABASE_PATH_ENV)

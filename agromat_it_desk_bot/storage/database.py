@@ -7,9 +7,12 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TypedDict
+from typing import Any, Mapping, TypedDict
 
-from agromat_it_desk_bot.config import DATABASE_PATH
+import pymysql  # type: ignore[import-untyped]
+from pymysql.cursors import DictCursor  # type: ignore[import-untyped]
+
+import agromat_it_desk_bot.config as config
 
 
 class DatabaseError(RuntimeError):
@@ -57,9 +60,24 @@ class IssueMessageRecord(TypedDict):
     updated_at: str
 
 
-def migrate() -> None:
-    """Create ``users`` table in DB if it does not exist."""
-    path: Path = DATABASE_PATH
+def _is_mysql() -> bool:
+    """Check whether MySQL backend is configured."""
+    return config.DATABASE_BACKEND == 'mysql'
+
+
+def _placeholder() -> str:
+    """Return parameter placeholder for active backend."""
+    return '%s' if _is_mysql() else '?'
+
+
+def _named_placeholder(name: str) -> str:
+    """Return named placeholder for active backend."""
+    return f'%({name})s' if _is_mysql() else f':{name}'
+
+
+def _migrate_sqlite() -> None:
+    """Create tables for SQLite backend."""
+    path: Path = config.DATABASE_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
 
     with _connect() as connection:
@@ -129,38 +147,129 @@ def migrate() -> None:
         _ensure_unique_index(connection)
 
 
-def _ensure_columns(connection: sqlite3.Connection) -> None:
+def _migrate_mysql() -> None:
+    """Create tables for MySQL backend."""
+    with _connect() as connection:
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                tg_user_id BIGINT NOT NULL UNIQUE,
+                yt_user_id VARCHAR(64) NOT NULL UNIQUE,
+                yt_login VARCHAR(255) NOT NULL,
+                yt_email VARCHAR(255),
+                token_hash CHAR(64),
+                token_created_at VARCHAR(64),
+                token_encrypted TEXT,
+                is_active TINYINT(1) NOT NULL DEFAULT 0,
+                last_seen_at VARCHAR(64),
+                registered_at VARCHAR(64) NOT NULL,
+                created_at VARCHAR(64) NOT NULL,
+                updated_at VARCHAR(64) NOT NULL,
+                INDEX idx_users_last_seen (last_seen_at)
+            )
+            """,
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS issue_messages (
+                issue_id VARCHAR(255) PRIMARY KEY,
+                chat_id VARCHAR(64) NOT NULL,
+                message_id BIGINT NOT NULL,
+                updated_at VARCHAR(64) NOT NULL,
+                archived TINYINT(1) NOT NULL DEFAULT 0
+            )
+            """,
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS issue_alerts (
+                issue_id VARCHAR(255) NOT NULL,
+                alert_index INT NOT NULL,
+                chat_id VARCHAR(64) NOT NULL,
+                message_id BIGINT NOT NULL,
+                send_after VARCHAR(64) NOT NULL,
+                sent_at VARCHAR(64),
+                PRIMARY KEY(issue_id, alert_index),
+                INDEX idx_issue_alerts_due (send_after)
+            )
+            """,
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS settings (
+                `key` VARCHAR(255) PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at VARCHAR(64) NOT NULL
+            )
+            """,
+        )
+        connection.commit()
+        _ensure_columns(connection)
+        _ensure_issue_message_columns(connection)
+        _backfill_registered_at(connection)
+        _ensure_unique_index(connection)
+def migrate() -> None:
+    """Create ``users`` table in DB if it does not exist."""
+    if _is_mysql():
+        _migrate_mysql()
+    else:
+        _migrate_sqlite()
+
+
+def _ensure_columns(connection: Any) -> None:
     """Ensure required columns exist in users table."""
     cursor = connection.cursor()
-    cursor.execute('PRAGMA table_info(users)')
-    columns: set[str] = {str(row['name']) for row in cursor.fetchall()}
+    if _is_mysql():
+        cursor.execute('SHOW COLUMNS FROM users')
+        columns: set[str] = {str(row['Field']) for row in cursor.fetchall()}
+        if 'registered_at' not in columns:
+            cursor.execute('ALTER TABLE users ADD COLUMN registered_at VARCHAR(64) NOT NULL DEFAULT \'\'')
+        if 'updated_at' not in columns:
+            cursor.execute('ALTER TABLE users ADD COLUMN updated_at VARCHAR(64) NOT NULL DEFAULT \'\'')
+        if 'token_encrypted' not in columns:
+            cursor.execute('ALTER TABLE users ADD COLUMN token_encrypted TEXT')
+    else:
+        cursor.execute('PRAGMA table_info(users)')
+        columns = {str(row['name']) for row in cursor.fetchall()}
 
-    if 'registered_at' not in columns:
-        cursor.execute('ALTER TABLE users ADD COLUMN registered_at TEXT')
-    if 'updated_at' not in columns:
-        cursor.execute('ALTER TABLE users ADD COLUMN updated_at TEXT')
-    if 'token_encrypted' not in columns:
-        cursor.execute('ALTER TABLE users ADD COLUMN token_encrypted TEXT')
+        if 'registered_at' not in columns:
+            cursor.execute('ALTER TABLE users ADD COLUMN registered_at TEXT')
+        if 'updated_at' not in columns:
+            cursor.execute('ALTER TABLE users ADD COLUMN updated_at TEXT')
+        if 'token_encrypted' not in columns:
+            cursor.execute('ALTER TABLE users ADD COLUMN token_encrypted TEXT')
     connection.commit()
 
 
-def _ensure_issue_message_columns(connection: sqlite3.Connection) -> None:
+def _ensure_issue_message_columns(connection: Any) -> None:
     """Ensure archived column exists in issue_messages table."""
     cursor = connection.cursor()
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='issue_messages'")
-    if cursor.fetchone() is None:
-        return
-    cursor.execute('PRAGMA table_info(issue_messages)')
-    columns: set[str] = {str(row['name']) for row in cursor.fetchall()}
-    if 'archived' not in columns:
-        cursor.execute('ALTER TABLE issue_messages ADD COLUMN archived INTEGER NOT NULL DEFAULT 0')
+    if _is_mysql():
+        cursor.execute("SHOW TABLES LIKE 'issue_messages'")
+        if cursor.fetchone() is None:
+            return
+        cursor.execute('SHOW COLUMNS FROM issue_messages')
+        columns: set[str] = {str(row['Field']) for row in cursor.fetchall()}
+        if 'archived' not in columns:
+            cursor.execute('ALTER TABLE issue_messages ADD COLUMN archived TINYINT(1) NOT NULL DEFAULT 0')
+    else:
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='issue_messages'")
+        if cursor.fetchone() is None:
+            return
+        cursor.execute('PRAGMA table_info(issue_messages)')
+        columns = {str(row['name']) for row in cursor.fetchall()}
+        if 'archived' not in columns:
+            cursor.execute('ALTER TABLE issue_messages ADD COLUMN archived INTEGER NOT NULL DEFAULT 0')
     connection.commit()
 
 
-def _backfill_registered_at(connection: sqlite3.Connection) -> None:
+def _backfill_registered_at(connection: Any) -> None:
     """Populate registered_at for existing records."""
     now: str = _utcnow()
     cursor = connection.cursor()
+    placeholder: str = _placeholder()
     cursor.execute(
         """
         UPDATE users
@@ -170,26 +279,26 @@ def _backfill_registered_at(connection: sqlite3.Connection) -> None:
             token_created_at,
             last_seen_at,
             updated_at,
-            ?
+            {ph}
         )
         WHERE registered_at IS NULL
             OR registered_at = ''
-        """,
+        """.format(ph=placeholder),
         (now,),
     )
     cursor.execute(
         """
         UPDATE users
-        SET updated_at = COALESCE(updated_at, last_seen_at, registered_at, created_at, ?)
+        SET updated_at = COALESCE(updated_at, last_seen_at, registered_at, created_at, {ph})
         WHERE updated_at IS NULL
             OR updated_at = ''
-        """,
+        """.format(ph=placeholder),
         (now,),
     )
     connection.commit()
 
 
-def _ensure_unique_index(connection: sqlite3.Connection) -> None:
+def _ensure_unique_index(connection: Any) -> None:
     """Add unique index on ``yt_user_id`` and check duplicates."""
     cursor = connection.cursor()
     cursor.execute(
@@ -200,24 +309,31 @@ def _ensure_unique_index(connection: sqlite3.Connection) -> None:
         HAVING cnt > 1
         """,
     )
-    duplicates: list[sqlite3.Row] = cursor.fetchall()
+    duplicates: list[Mapping[str, Any]] = cursor.fetchall()
     if duplicates:
         offenders: str = ', '.join(str(row['yt_user_id']) for row in duplicates)
         raise DatabaseError(
             'Виявлено дублікати YouTrack-акаунтів: '
             f'{offenders}. Видаліть або обʼєднайте записи перед запуском бота.',
         )
-
-    cursor.execute("PRAGMA index_list('users')")
-    existing_indexes: set[str] = {str(row['name']) for row in cursor.fetchall()}
-    if 'idx_users_yt_user_id' in existing_indexes:
-        cursor.execute('DROP INDEX idx_users_yt_user_id')
-    cursor.execute(
-        """
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_users_yt_user_id_unique
-        ON users(yt_user_id)
-        """,
-    )
+    if _is_mysql():
+        cursor.execute("SHOW INDEX FROM users WHERE Key_name = 'idx_users_yt_user_id'")
+        if cursor.fetchall():
+            cursor.execute('DROP INDEX idx_users_yt_user_id ON users')
+        cursor.execute("SHOW INDEX FROM users WHERE Key_name = 'idx_users_yt_user_id_unique'")
+        if not cursor.fetchall():
+            cursor.execute('CREATE UNIQUE INDEX idx_users_yt_user_id_unique ON users(yt_user_id)')
+    else:
+        cursor.execute("PRAGMA index_list('users')")
+        existing_indexes: set[str] = {str(row['name']) for row in cursor.fetchall()}
+        if 'idx_users_yt_user_id' in existing_indexes:
+            cursor.execute('DROP INDEX idx_users_yt_user_id')
+        cursor.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_users_yt_user_id_unique
+            ON users(yt_user_id)
+            """,
+        )
     connection.commit()
 
 
@@ -230,18 +346,20 @@ def upsert_user(record: UserRecord) -> None:
     _assert_required(record, ('tg_user_id', 'yt_user_id', 'yt_login'))
     now: str = _utcnow()
     tg_user_id: int = int(record['tg_user_id'])
+    placeholder: str = _placeholder()
 
     with _connect() as connection:
         cursor = connection.cursor()
+        named = _named_placeholder
         cursor.execute(
-            """
-            SELECT id, registered_at, created_at FROM users WHERE tg_user_id = ?
+            f"""
+            SELECT id, registered_at, created_at FROM users WHERE tg_user_id = {placeholder}
             """,
             (tg_user_id,),
         )
-        existing: sqlite3.Row | None = cursor.fetchone()
+        existing: Mapping[str, Any] | None = cursor.fetchone()
         cursor.execute(
-            """
+            f"""
             SELECT
                 id,
                 tg_user_id,
@@ -257,11 +375,11 @@ def upsert_user(record: UserRecord) -> None:
                 created_at,
                 updated_at
             FROM users
-            WHERE yt_user_id = ?
+            WHERE yt_user_id = {placeholder}
             """,
             (record['yt_user_id'],),
         )
-        existing_by_yt: sqlite3.Row | None = cursor.fetchone()
+        existing_by_yt: Mapping[str, Any] | None = cursor.fetchone()
         payload: dict[str, object] = {
             'tg_user_id': tg_user_id,
             'yt_user_id': record['yt_user_id'],
@@ -284,19 +402,31 @@ def upsert_user(record: UserRecord) -> None:
                 """
                 UPDATE users
                 SET
-                    tg_user_id = :tg_user_id,
-                    yt_user_id = :yt_user_id,
-                    yt_login = :yt_login,
-                    yt_email = :yt_email,
-                    token_hash = :token_hash,
-                    token_created_at = :token_created_at,
-                    token_encrypted = :token_encrypted,
-                    is_active = :is_active,
-                    last_seen_at = :last_seen_at,
-                    registered_at = :registered_at,
-                    updated_at = :updated_at
-                WHERE yt_user_id = :yt_user_id
-                """,
+                    tg_user_id = {tg_user_id},
+                    yt_user_id = {yt_user_id},
+                    yt_login = {yt_login},
+                    yt_email = {yt_email},
+                    token_hash = {token_hash},
+                    token_created_at = {token_created_at},
+                    token_encrypted = {token_encrypted},
+                    is_active = {is_active},
+                    last_seen_at = {last_seen_at},
+                    registered_at = {registered_at},
+                    updated_at = {updated_at}
+                WHERE yt_user_id = {yt_user_id}
+                """.format(
+                    tg_user_id=named('tg_user_id'),
+                    yt_user_id=named('yt_user_id'),
+                    yt_login=named('yt_login'),
+                    yt_email=named('yt_email'),
+                    token_hash=named('token_hash'),
+                    token_created_at=named('token_created_at'),
+                    token_encrypted=named('token_encrypted'),
+                    is_active=named('is_active'),
+                    last_seen_at=named('last_seen_at'),
+                    registered_at=named('registered_at'),
+                    updated_at=named('updated_at'),
+                ),
                 payload,
             )
             connection.commit()
@@ -322,20 +452,33 @@ def upsert_user(record: UserRecord) -> None:
                     created_at,
                     updated_at
                 ) VALUES (
-                    :tg_user_id,
-                    :yt_user_id,
-                    :yt_login,
-                    :yt_email,
-                    :token_hash,
-                    :token_created_at,
-                    :token_encrypted,
-                    :is_active,
-                    :last_seen_at,
-                    :registered_at,
-                    :created_at,
-                    :updated_at
+                    {tg_user_id},
+                    {yt_user_id},
+                    {yt_login},
+                    {yt_email},
+                    {token_hash},
+                    {token_created_at},
+                    {token_encrypted},
+                    {is_active},
+                    {last_seen_at},
+                    {registered_at},
+                    {created_at},
+                    {updated_at}
                 )
-                """,
+                """.format(
+                    tg_user_id=named('tg_user_id'),
+                    yt_user_id=named('yt_user_id'),
+                    yt_login=named('yt_login'),
+                    yt_email=named('yt_email'),
+                    token_hash=named('token_hash'),
+                    token_created_at=named('token_created_at'),
+                    token_encrypted=named('token_encrypted'),
+                    is_active=named('is_active'),
+                    last_seen_at=named('last_seen_at'),
+                    registered_at=named('registered_at'),
+                    created_at=named('created_at'),
+                    updated_at=named('updated_at'),
+                ),
                 payload,
             )
         else:
@@ -350,18 +493,30 @@ def upsert_user(record: UserRecord) -> None:
                 """
                 UPDATE users
                 SET
-                    yt_user_id = :yt_user_id,
-                    yt_login = :yt_login,
-                    yt_email = :yt_email,
-                    token_hash = :token_hash,
-                    token_created_at = :token_created_at,
-                    token_encrypted = :token_encrypted,
-                    is_active = :is_active,
-                    last_seen_at = :last_seen_at,
-                    registered_at = :registered_at,
-                    updated_at = :updated_at
-                WHERE tg_user_id = :tg_user_id
-                """,
+                    yt_user_id = {yt_user_id},
+                    yt_login = {yt_login},
+                    yt_email = {yt_email},
+                    token_hash = {token_hash},
+                    token_created_at = {token_created_at},
+                    token_encrypted = {token_encrypted},
+                    is_active = {is_active},
+                    last_seen_at = {last_seen_at},
+                    registered_at = {registered_at},
+                    updated_at = {updated_at}
+                WHERE tg_user_id = {tg_user_id}
+                """.format(
+                    yt_user_id=named('yt_user_id'),
+                    yt_login=named('yt_login'),
+                    yt_email=named('yt_email'),
+                    token_hash=named('token_hash'),
+                    token_created_at=named('token_created_at'),
+                    token_encrypted=named('token_encrypted'),
+                    is_active=named('is_active'),
+                    last_seen_at=named('last_seen_at'),
+                    registered_at=named('registered_at'),
+                    updated_at=named('updated_at'),
+                    tg_user_id=named('tg_user_id'),
+                ),
                 payload,
             )
         connection.commit()
@@ -372,7 +527,7 @@ def fetch_user_by_tg_id(tg_user_id: int) -> UserRecord | None:
     with _connect() as connection:
         cursor = connection.cursor()
         cursor.execute(
-            """
+            f"""
             SELECT
                 id,
                 tg_user_id,
@@ -388,11 +543,11 @@ def fetch_user_by_tg_id(tg_user_id: int) -> UserRecord | None:
                 created_at,
                 updated_at
             FROM users
-            WHERE tg_user_id = ?
+            WHERE tg_user_id = {_placeholder()}
             """,
             (tg_user_id,),
         )
-        row: sqlite3.Row | None = cursor.fetchone()
+        row: Mapping[str, Any] | None = cursor.fetchone()
         if row is None:
             return None
         return _row_to_record(row)
@@ -403,7 +558,7 @@ def fetch_user_by_yt_id(yt_user_id: str) -> UserRecord | None:
     with _connect() as connection:
         cursor = connection.cursor()
         cursor.execute(
-            """
+            f"""
             SELECT
                 id,
                 tg_user_id,
@@ -419,12 +574,12 @@ def fetch_user_by_yt_id(yt_user_id: str) -> UserRecord | None:
                 created_at,
                 updated_at
             FROM users
-            WHERE yt_user_id = ?
+            WHERE yt_user_id = {_placeholder()}
               AND is_active = 1
             """,
             (yt_user_id,),
         )
-        row: sqlite3.Row | None = cursor.fetchone()
+        row: Mapping[str, Any] | None = cursor.fetchone()
         if row is None:
             return None
         return _row_to_record(row)
@@ -435,17 +590,18 @@ def deactivate_user(tg_user_id: int) -> None:
     now: str = _utcnow()
     with _connect() as connection:
         cursor = connection.cursor()
+        placeholder: str = _placeholder()
         cursor.execute(
-            """
+            f"""
             UPDATE users
             SET
                 is_active = 0,
                 token_hash = NULL,
                 token_created_at = NULL,
                 token_encrypted = NULL,
-                updated_at = ?,
-                last_seen_at = ?
-            WHERE tg_user_id = ?
+                updated_at = {placeholder},
+                last_seen_at = {placeholder}
+            WHERE tg_user_id = {placeholder}
             """,
             (now, now, tg_user_id),
         )
@@ -459,29 +615,54 @@ def upsert_issue_message(issue_id: str, chat_id: int | str, message_id: int) -> 
     with _connect() as connection:
         cursor = connection.cursor()
         _ensure_issue_message_columns(connection)
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS issue_messages (
-                issue_id TEXT PRIMARY KEY,
-                chat_id TEXT NOT NULL,
-                message_id INTEGER NOT NULL,
-                updated_at TEXT NOT NULL,
-                archived INTEGER NOT NULL DEFAULT 0
+        if _is_mysql():
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS issue_messages (
+                    issue_id VARCHAR(255) PRIMARY KEY,
+                    chat_id VARCHAR(64) NOT NULL,
+                    message_id BIGINT NOT NULL,
+                    updated_at VARCHAR(64) NOT NULL,
+                    archived TINYINT(1) NOT NULL DEFAULT 0
+                )
+                """,
             )
-            """,
-        )
-        cursor.execute(
-            """
-            INSERT INTO issue_messages(issue_id, chat_id, message_id, updated_at, archived)
-            VALUES(?, ?, ?, ?, 0)
-            ON CONFLICT(issue_id) DO UPDATE SET
-                chat_id = excluded.chat_id,
-                message_id = excluded.message_id,
-                updated_at = excluded.updated_at,
-                archived = 0
-            """,
-            (issue_id, chat_value, message_id, now),
-        )
+            cursor.execute(
+                """
+                INSERT INTO issue_messages(issue_id, chat_id, message_id, updated_at, archived)
+                VALUES(%s, %s, %s, %s, 0)
+                ON DUPLICATE KEY UPDATE
+                    chat_id = VALUES(chat_id),
+                    message_id = VALUES(message_id),
+                    updated_at = VALUES(updated_at),
+                    archived = 0
+                """,
+                (issue_id, chat_value, message_id, now),
+            )
+        else:
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS issue_messages (
+                    issue_id TEXT PRIMARY KEY,
+                    chat_id TEXT NOT NULL,
+                    message_id INTEGER NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    archived INTEGER NOT NULL DEFAULT 0
+                )
+                """,
+            )
+            cursor.execute(
+                """
+                INSERT INTO issue_messages(issue_id, chat_id, message_id, updated_at, archived)
+                VALUES(?, ?, ?, ?, 0)
+                ON CONFLICT(issue_id) DO UPDATE SET
+                    chat_id = excluded.chat_id,
+                    message_id = excluded.message_id,
+                    updated_at = excluded.updated_at,
+                    archived = 0
+                """,
+                (issue_id, chat_value, message_id, now),
+            )
         connection.commit()
 
 
@@ -491,14 +672,14 @@ def fetch_issue_message(issue_id: str) -> dict[str, str | int] | None:
         cursor = connection.cursor()
         _ensure_issue_message_columns(connection)
         cursor.execute(
-            """
+            f"""
             SELECT issue_id, chat_id, message_id, updated_at
             FROM issue_messages
-            WHERE issue_id = ?
+            WHERE issue_id = {_placeholder()}
             """,
             (issue_id,),
         )
-        row: sqlite3.Row | None = cursor.fetchone()
+        row: Mapping[str, Any] | None = cursor.fetchone()
         if row is None:
             return None
         return {
@@ -515,15 +696,15 @@ def fetch_stale_issue_messages(older_than_iso: str) -> list[IssueMessageRecord]:
         cursor = connection.cursor()
         _ensure_issue_message_columns(connection)
         cursor.execute(
-            """
+            f"""
             SELECT issue_id, chat_id, message_id, updated_at
             FROM issue_messages
             WHERE archived = 0
-              AND updated_at <= ?
+              AND updated_at <= {_placeholder()}
             """,
             (older_than_iso,),
         )
-        rows: list[sqlite3.Row] = cursor.fetchall()
+        rows: list[Mapping[str, Any]] = cursor.fetchall()
         return [
             IssueMessageRecord(
                 issue_id=str(row['issue_id']),
@@ -549,11 +730,12 @@ def upsert_issue_alerts(
     with _connect() as connection:
         cursor = connection.cursor()
         _ensure_issue_alerts_table(cursor)
-        cursor.execute('DELETE FROM issue_alerts WHERE issue_id = ?', (issue_id,))
+        placeholder: str = _placeholder()
+        cursor.execute(f'DELETE FROM issue_alerts WHERE issue_id = {placeholder}', (issue_id,))
         cursor.executemany(
-            """
+            f"""
             INSERT INTO issue_alerts(issue_id, alert_index, chat_id, message_id, send_after, sent_at)
-            VALUES(?, ?, ?, ?, ?, NULL)
+            VALUES({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, NULL)
             """,
             [(issue_id, index, chat_value, message_id, send_after) for index, send_after in alerts],
         )
@@ -565,7 +747,7 @@ def clear_issue_alerts(issue_id: str) -> None:
     with _connect() as connection:
         cursor = connection.cursor()
         _ensure_issue_alerts_table(cursor)
-        cursor.execute('DELETE FROM issue_alerts WHERE issue_id = ?', (issue_id,))
+        cursor.execute(f'DELETE FROM issue_alerts WHERE issue_id = {_placeholder()}', (issue_id,))
         connection.commit()
 
 
@@ -575,17 +757,17 @@ def fetch_due_issue_alerts(limit: int, upper_bound_iso: str) -> list[IssueAlertR
         cursor = connection.cursor()
         _ensure_issue_alerts_table(cursor)
         cursor.execute(
-            """
+            f"""
             SELECT issue_id, alert_index, chat_id, message_id, send_after
             FROM issue_alerts
             WHERE sent_at IS NULL
-                AND send_after <= ?
+                AND send_after <= {_placeholder()}
             ORDER BY send_after ASC
-            LIMIT ?
+            LIMIT {_placeholder()}
             """,
             (upper_bound_iso, limit),
         )
-        rows: list[sqlite3.Row] = cursor.fetchall()
+        rows: list[Mapping[str, Any]] = cursor.fetchall()
         records: list[IssueAlertRecord] = []
         for row in rows:
             records.append({
@@ -603,12 +785,13 @@ def mark_issue_alert_sent(issue_id: str, alert_index: int) -> None:
     with _connect() as connection:
         cursor = connection.cursor()
         _ensure_issue_alerts_table(cursor)
+        placeholder: str = _placeholder()
         cursor.execute(
-            """
+            f"""
             UPDATE issue_alerts
-            SET sent_at = ?
-            WHERE issue_id = ?
-                AND alert_index = ?
+            SET sent_at = {placeholder}
+            WHERE issue_id = {placeholder}
+                AND alert_index = {placeholder}
             """,
             (_utcnow(), issue_id, alert_index),
         )
@@ -621,12 +804,13 @@ def mark_issue_archived(issue_id: str) -> None:
     with _connect() as connection:
         cursor = connection.cursor()
         _ensure_issue_message_columns(connection)
+        placeholder: str = _placeholder()
         cursor.execute(
-            """
+            f"""
             UPDATE issue_messages
             SET archived = 1,
-                updated_at = ?
-            WHERE issue_id = ?
+                updated_at = {placeholder}
+            WHERE issue_id = {placeholder}
             """,
             (now, issue_id),
         )
@@ -639,15 +823,15 @@ def fetch_setting(key: str) -> str | None:
         cursor = connection.cursor()
         _ensure_settings_table(cursor)
         cursor.execute(
-            """
+            f"""
             SELECT value
             FROM settings
-            WHERE key = ?
+            WHERE `key` = {_placeholder()}
             LIMIT 1
             """,
             (key,),
         )
-        row = cursor.fetchone()
+        row: Mapping[str, Any] | None = cursor.fetchone()
         return str(row['value']) if row else None
 
 
@@ -657,14 +841,25 @@ def upsert_setting(key: str, value: str) -> None:
     with _connect() as connection:
         cursor = connection.cursor()
         _ensure_settings_table(cursor)
-        cursor.execute(
-            """
-            INSERT INTO settings(key, value, updated_at)
-            VALUES (?, ?, ?)
-            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-            """,
-            (key, value, now),
-        )
+        placeholder: str = _placeholder()
+        if _is_mysql():
+            cursor.execute(
+                f"""
+                INSERT INTO settings(`key`, value, updated_at)
+                VALUES ({placeholder}, {placeholder}, {placeholder})
+                ON DUPLICATE KEY UPDATE value = VALUES(value), updated_at = VALUES(updated_at)
+                """,
+                (key, value, now),
+            )
+        else:
+            cursor.execute(
+                """
+                INSERT INTO settings(key, value, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+                """,
+                (key, value, now),
+            )
         connection.commit()
 
 
@@ -673,7 +868,7 @@ def delete_setting(key: str) -> None:
     with _connect() as connection:
         cursor = connection.cursor()
         _ensure_settings_table(cursor)
-        cursor.execute('DELETE FROM settings WHERE key = ?', (key,))
+        cursor.execute(f'DELETE FROM settings WHERE `key` = {_placeholder()}', (key,))
         connection.commit()
 
 
@@ -693,40 +888,70 @@ def update_alert_suffix(value: str) -> None:
     upsert_setting('alert_suffix', value)
 
 
-def _ensure_issue_alerts_table(cursor: sqlite3.Cursor) -> None:
+def _ensure_issue_alerts_table(cursor: Any) -> None:
     """Ensure issue_alerts table exists."""
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS issue_alerts (
-            issue_id TEXT NOT NULL,
-            alert_index INTEGER NOT NULL,
-            chat_id TEXT NOT NULL,
-            message_id INTEGER NOT NULL,
-            send_after TEXT NOT NULL,
-            sent_at TEXT,
-            PRIMARY KEY(issue_id, alert_index)
+    if _is_mysql():
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS issue_alerts (
+                issue_id VARCHAR(255) NOT NULL,
+                alert_index INT NOT NULL,
+                chat_id VARCHAR(64) NOT NULL,
+                message_id BIGINT NOT NULL,
+                send_after VARCHAR(64) NOT NULL,
+                sent_at VARCHAR(64),
+                PRIMARY KEY(issue_id, alert_index)
+            )
+            """,
         )
-        """,
-    )
-    cursor.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_issue_alerts_due
-        ON issue_alerts(send_after)
-        """,
-    )
+        cursor.execute("SHOW INDEX FROM issue_alerts WHERE Key_name = 'idx_issue_alerts_due'")
+        existing_indexes: list[Mapping[str, Any]] = cursor.fetchall()
+        if not existing_indexes:
+            cursor.execute('CREATE INDEX idx_issue_alerts_due ON issue_alerts(send_after)')
+    else:
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS issue_alerts (
+                issue_id TEXT NOT NULL,
+                alert_index INTEGER NOT NULL,
+                chat_id TEXT NOT NULL,
+                message_id INTEGER NOT NULL,
+                send_after TEXT NOT NULL,
+                sent_at TEXT,
+                PRIMARY KEY(issue_id, alert_index)
+            )
+            """,
+        )
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_issue_alerts_due
+            ON issue_alerts(send_after)
+            """,
+        )
 
 
-def _ensure_settings_table(cursor: sqlite3.Cursor) -> None:
+def _ensure_settings_table(cursor: Any) -> None:
     """Ensure settings table exists."""
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL,
-            updated_at TEXT NOT NULL
+    if _is_mysql():
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS settings (
+                `key` VARCHAR(255) PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at VARCHAR(64) NOT NULL
+            )
+            """,
         )
-        """,
-    )
+    else:
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """,
+        )
 
 
 def touch_last_seen(tg_user_id: int) -> None:
@@ -734,11 +959,12 @@ def touch_last_seen(tg_user_id: int) -> None:
     now: str = _utcnow()
     with _connect() as connection:
         cursor = connection.cursor()
+        placeholder: str = _placeholder()
         cursor.execute(
-            """
+            f"""
             UPDATE users
-            SET last_seen_at = ?, updated_at = ?
-            WHERE tg_user_id = ?
+            SET last_seen_at = {placeholder}, updated_at = {placeholder}
+            WHERE tg_user_id = {placeholder}
             """,
             (now, now, tg_user_id),
         )
@@ -746,24 +972,43 @@ def touch_last_seen(tg_user_id: int) -> None:
 
 
 @contextmanager
-def _connect() -> Iterator[sqlite3.Connection]:
+def _connect() -> Iterator[Any]:
     """Create database connection."""
-    connection = sqlite3.connect(
-        str(DATABASE_PATH),
-        detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES,
-        check_same_thread=False,
-    )
-    connection.row_factory = sqlite3.Row
+    if _is_mysql():
+        if config.MYSQL_USER is None or config.MYSQL_PASSWORD is None:
+            raise DatabaseError('Налаштуйте MYSQL_USER та MYSQL_PASSWORD')
+        connection = pymysql.connect(
+            host=config.MYSQL_HOST,
+            port=config.MYSQL_PORT,
+            user=config.MYSQL_USER,
+            password=config.MYSQL_PASSWORD,
+            database=config.MYSQL_DATABASE,
+            charset=config.MYSQL_CHARSET,
+            cursorclass=DictCursor,
+            autocommit=False,
+        )
+        error_class = pymysql.MySQLError
+    else:
+        path: Path = config.DATABASE_PATH
+        path.parent.mkdir(parents=True, exist_ok=True)
+        connection = sqlite3.connect(
+            str(path),
+            detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES,
+            check_same_thread=False,
+        )
+        connection.row_factory = sqlite3.Row
+        error_class = sqlite3.Error
     try:
         yield connection
-    except sqlite3.Error as exc:
+    except error_class as exc:
         connection.rollback()
-        raise DatabaseError(f'Помилка SQLite: {exc}') from exc
+        prefix: str = 'MySQL' if _is_mysql() else 'SQLite'
+        raise DatabaseError(f'Помилка {prefix}: {exc}') from exc
     finally:
         connection.close()
 
 
-def _row_to_record(row: sqlite3.Row) -> UserRecord:
+def _row_to_record(row: Mapping[str, Any]) -> UserRecord:
     """Convert SQLite row to ``UserRecord``."""
     result: UserRecord = {
         'id': int(row['id']),

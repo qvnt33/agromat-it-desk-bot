@@ -21,6 +21,7 @@ def isolated_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterat
     Забезпечує, що тести не торкаються робочого середовища користувача.
     """
     db_path: Path = tmp_path / 'bot.sqlite3'
+    monkeypatch.setattr(config, 'DATABASE_BACKEND', 'sqlite', raising=False)
     monkeypatch.setattr(config, 'DATABASE_PATH', db_path, raising=False)
     monkeypatch.setattr(db, 'DATABASE_PATH', db_path, raising=False)
     monkeypatch.setattr(auth_service, '_migrated', False, raising=False)
