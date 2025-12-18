@@ -7,7 +7,7 @@ import logging
 from collections.abc import Mapping
 from typing import NamedTuple
 
-from agromat_it_desk_bot.auth import (
+from agromat_help_desk_bot.auth import (
     RegistrationError,
     RegistrationOutcome,
     deactivate_user,
@@ -15,11 +15,11 @@ from agromat_it_desk_bot.auth import (
     is_authorized,
     register_user,
 )
-from agromat_it_desk_bot.config import NEW_STATUS_ALERT_SUFFIX_ADMIN_ID
-from agromat_it_desk_bot.messages import Msg, get_template, render
-from agromat_it_desk_bot.storage import update_alert_suffix
-from agromat_it_desk_bot.telegram import context as telegram_context
-from agromat_it_desk_bot.telegram.telegram_sender import TelegramSender, escape_html
+from agromat_help_desk_bot.config import NEW_STATUS_ALERT_SUFFIX_ADMIN_ID
+from agromat_help_desk_bot.messages import Msg, get_template, render
+from agromat_help_desk_bot.storage import update_alert_suffix
+from agromat_help_desk_bot.telegram import context as telegram_context
+from agromat_help_desk_bot.telegram.telegram_sender import TelegramSender, escape_html
 
 logger: logging.Logger = logging.getLogger(__name__)
 

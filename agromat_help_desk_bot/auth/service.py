@@ -9,16 +9,16 @@ from datetime import datetime, timezone
 from enum import Enum
 from threading import Lock
 
-import agromat_it_desk_bot.config as app_config
-from agromat_it_desk_bot.storage import deactivate_user as storage_deactivate_user
-from agromat_it_desk_bot.storage import (
+import agromat_help_desk_bot.config as app_config
+from agromat_help_desk_bot.storage import deactivate_user as storage_deactivate_user
+from agromat_help_desk_bot.storage import (
     fetch_user_by_tg_id,
     fetch_user_by_yt_id,
     migrate,
     touch_last_seen,
     upsert_user,
 )
-from agromat_it_desk_bot.youtrack.youtrack_auth_service import (
+from agromat_help_desk_bot.youtrack.youtrack_auth_service import (
     InvalidTokenError,
     TemporaryYouTrackError,
     is_member_of_project,

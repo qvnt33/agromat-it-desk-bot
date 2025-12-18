@@ -8,7 +8,7 @@ from datetime import datetime
 import pytest
 from aiogram.types import Message
 
-import agromat_it_desk_bot.telegram.telegram_aiogram as telegram_aiogram
+import agromat_help_desk_bot.telegram.telegram_aiogram as telegram_aiogram
 
 pytestmark = pytest.mark.asyncio
 

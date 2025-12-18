@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from agromat_it_desk_bot.messages import Msg, render
-from agromat_it_desk_bot.utils import format_telegram_message
+from agromat_help_desk_bot.messages import Msg, render
+from agromat_help_desk_bot.utils import format_telegram_message
 
 
 def _build_message(status: str | None) -> str:

@@ -5,8 +5,8 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
-import agromat_it_desk_bot.config as config
-import agromat_it_desk_bot.storage.database as db
+import agromat_help_desk_bot.config as config
+import agromat_help_desk_bot.storage.database as db
 
 
 def _update_issue_message(issue_id: str, *, updated_at: str, archived: int = 0) -> None:

@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from agromat_it_desk_bot.schedule.weekly import (
+from agromat_help_desk_bot.schedule.weekly import (
     DailyReminder,
     ExchangeSourceConfig,
     ReminderConfig,

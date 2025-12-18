@@ -7,9 +7,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-import agromat_it_desk_bot.config as config
-from agromat_it_desk_bot.alerts import new_status
-from agromat_it_desk_bot.storage import fetch_due_issue_alerts
+import agromat_help_desk_bot.config as config
+from agromat_help_desk_bot.alerts import new_status
+from agromat_help_desk_bot.storage import fetch_due_issue_alerts
 from tests.conftest import FakeTelegramSender
 
 

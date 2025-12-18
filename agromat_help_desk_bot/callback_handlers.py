@@ -9,13 +9,13 @@ from typing import NamedTuple
 
 from fastapi import HTTPException, Request
 
-from agromat_it_desk_bot.auth import get_authorized_yt_user, get_user_token
-from agromat_it_desk_bot.config import TELEGRAM_WEBHOOK_SECRET, YOUTRACK_STATE_IN_PROGRESS, YT_BASE_URL
-from agromat_it_desk_bot.messages import Msg, render
-from agromat_it_desk_bot.telegram import context as telegram_context
-from agromat_it_desk_bot.telegram.telegram_sender import TelegramSender
-from agromat_it_desk_bot.utils import format_telegram_message
-from agromat_it_desk_bot.youtrack.youtrack_service import IssueDetails, assign_issue, fetch_issue_details
+from agromat_help_desk_bot.auth import get_authorized_yt_user, get_user_token
+from agromat_help_desk_bot.config import TELEGRAM_WEBHOOK_SECRET, YOUTRACK_STATE_IN_PROGRESS, YT_BASE_URL
+from agromat_help_desk_bot.messages import Msg, render
+from agromat_help_desk_bot.telegram import context as telegram_context
+from agromat_help_desk_bot.telegram.telegram_sender import TelegramSender
+from agromat_help_desk_bot.utils import format_telegram_message
+from agromat_help_desk_bot.youtrack.youtrack_service import IssueDetails, assign_issue, fetch_issue_details
 
 logger: logging.Logger = logging.getLogger(__name__)
 _processed_accept_keys: set[str] = set()

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-import agromat_it_desk_bot.telegram.telegram_commands as telegram_commands
-from agromat_it_desk_bot.messages import Msg, render
+import agromat_help_desk_bot.telegram.telegram_commands as telegram_commands
+from agromat_help_desk_bot.messages import Msg, render
 from tests.conftest import FakeTelegramSender
 
 pytestmark = pytest.mark.asyncio

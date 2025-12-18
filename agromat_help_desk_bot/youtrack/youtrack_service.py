@@ -17,10 +17,10 @@ from .youtrack_client import (
     update_issue_summary,
 )
 
-from agromat_it_desk_bot.auth import get_authorized_yt_user
-from agromat_it_desk_bot.config import YOUTRACK_STATE_FIELD_NAME, YOUTRACK_STATE_IN_PROGRESS
-from agromat_it_desk_bot.messages import Msg, render
-from agromat_it_desk_bot.utils import extract_issue_assignee, extract_issue_author, extract_issue_status
+from agromat_help_desk_bot.auth import get_authorized_yt_user
+from agromat_help_desk_bot.config import YOUTRACK_STATE_FIELD_NAME, YOUTRACK_STATE_IN_PROGRESS
+from agromat_help_desk_bot.messages import Msg, render
+from agromat_help_desk_bot.utils import extract_issue_assignee, extract_issue_author, extract_issue_status
 
 logging.basicConfig(level=logging.INFO)
 logger: logging.Logger = logging.getLogger(__name__)

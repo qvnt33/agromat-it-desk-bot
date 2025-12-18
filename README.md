@@ -114,8 +114,8 @@
 ---
 
 ## Структура репозиторію
-- `agromat_it_desk_bot/main.py` – FastAPI застосунок + обробники вебхуків.
-- `agromat_it_desk_bot/utils.py` – форматування повідомлень та санітайзинг.
+- `agromat_help_desk_bot/main.py` – FastAPI застосунок + обробники вебхуків.
+- `agromat_help_desk_bot/utils.py` – форматування повідомлень та санітайзинг.
 - `youtrack_app/` – скрипти Automation App для YouTrack.
 - `tests/` – unit та інтеграційні тести (використовують тестову SQLite).
 

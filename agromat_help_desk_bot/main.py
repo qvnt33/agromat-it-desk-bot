@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import uvicorn
 
-from agromat_it_desk_bot.api.youtrack import youtrack_update, youtrack_webhook  # noqa: F401
-from agromat_it_desk_bot.app import create_app
-from agromat_it_desk_bot.config import TELEGRAM_CHAT_ID
-from agromat_it_desk_bot.services.youtrack_webhook import build_issue_url as _build_issue_url  # noqa: F401
-from agromat_it_desk_bot.services.youtrack_webhook import (
+from agromat_help_desk_bot.api.youtrack import youtrack_update, youtrack_webhook  # noqa: F401
+from agromat_help_desk_bot.app import create_app
+from agromat_help_desk_bot.config import TELEGRAM_CHAT_ID
+from agromat_help_desk_bot.services.youtrack_webhook import build_issue_url as _build_issue_url  # noqa: F401
+from agromat_help_desk_bot.services.youtrack_webhook import (
     is_edit_window_expired as _is_edit_window_expired,  # noqa: F401
 )
-from agromat_it_desk_bot.services.youtrack_webhook import prepare_issue_payload as _prepare_issue_payload  # noqa: F401
-from agromat_it_desk_bot.services.youtrack_webhook import (
+from agromat_help_desk_bot.services.youtrack_webhook import prepare_issue_payload as _prepare_issue_payload  # noqa: F401
+from agromat_help_desk_bot.services.youtrack_webhook import (
     prepare_payload_for_logging as _prepare_payload_for_logging,  # noqa: F401
 )
-from agromat_it_desk_bot.telegram import telegram_commands
+from agromat_help_desk_bot.telegram import telegram_commands
 
 app = create_app()
 

@@ -12,7 +12,7 @@ from typing import Any, Mapping, TypedDict
 import pymysql  # type: ignore[import-untyped]
 from pymysql.cursors import DictCursor  # type: ignore[import-untyped]
 
-import agromat_it_desk_bot.config as config
+import agromat_help_desk_bot.config as config
 
 
 class DatabaseError(RuntimeError):

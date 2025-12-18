@@ -10,11 +10,11 @@ from aiogram.exceptions import TelegramBadRequest
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import ValidationError
 
-from agromat_it_desk_bot.alerts.new_status import cancel_new_status_alerts, schedule_new_status_alerts
-from agromat_it_desk_bot.config import TELEGRAM_CHAT_ID
-from agromat_it_desk_bot.messages import Msg, render
-from agromat_it_desk_bot.models import YouTrackUpdatePayload, YouTrackWebhookPayload
-from agromat_it_desk_bot.services.youtrack_webhook import (
+from agromat_help_desk_bot.alerts.new_status import cancel_new_status_alerts, schedule_new_status_alerts
+from agromat_help_desk_bot.config import TELEGRAM_CHAT_ID
+from agromat_help_desk_bot.messages import Msg, render
+from agromat_help_desk_bot.models import YouTrackUpdatePayload, YouTrackWebhookPayload
+from agromat_help_desk_bot.services.youtrack_webhook import (
     build_issue_url,
     build_log_entry,
     is_edit_window_expired,
@@ -22,9 +22,9 @@ from agromat_it_desk_bot.services.youtrack_webhook import (
     prepare_payload_for_logging,
     render_telegram_message,
 )
-from agromat_it_desk_bot.storage import fetch_issue_message, upsert_issue_message
-from agromat_it_desk_bot.telegram import context as telegram_context
-from agromat_it_desk_bot.utils import (
+from agromat_help_desk_bot.storage import fetch_issue_message, upsert_issue_message
+from agromat_help_desk_bot.telegram import context as telegram_context
+from agromat_help_desk_bot.utils import (
     extract_issue_assignee,
     extract_issue_author,
     extract_issue_id,
@@ -34,26 +34,26 @@ from agromat_it_desk_bot.utils import (
     normalize_issue_summary,
     strip_html,
 )
-from agromat_it_desk_bot.youtrack.youtrack_service import IssueDetails, ensure_summary_placeholder, fetch_issue_details
+from agromat_help_desk_bot.youtrack.youtrack_service import IssueDetails, ensure_summary_placeholder, fetch_issue_details
 
 logger: logging.Logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 def _webhook_secret() -> str | None:
-    from agromat_it_desk_bot import main
+    from agromat_help_desk_bot import main
 
     return getattr(main, 'YT_WEBHOOK_SECRET', None)
 
 
 def _chat_id() -> int | str:
-    from agromat_it_desk_bot import main
+    from agromat_help_desk_bot import main
 
     return getattr(main, '_TELEGRAM_CHAT_ID_RESOLVED', TELEGRAM_CHAT_ID or '')
 
 
 def _get_callable(name: str, default: Any) -> Any:
-    from agromat_it_desk_bot import main
+    from agromat_help_desk_bot import main
 
     return getattr(main, name, default)
 

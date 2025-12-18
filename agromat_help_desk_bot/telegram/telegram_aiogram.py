@@ -9,8 +9,8 @@ from aiogram import Bot, Dispatcher, F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, InaccessibleMessage, Message, Update
 
-from agromat_it_desk_bot.telegram.middleware import AuthorizationMiddleware
-from agromat_it_desk_bot.telegram.telegram_commands import (
+from agromat_help_desk_bot.telegram.middleware import AuthorizationMiddleware
+from agromat_help_desk_bot.telegram.telegram_commands import (
     CALLBACK_CONFIRM_NO,
     CALLBACK_CONFIRM_YES,
     CALLBACK_RECONNECT_START,
@@ -27,7 +27,7 @@ from agromat_it_desk_bot.telegram.telegram_commands import (
 )
 
 if TYPE_CHECKING:
-    from agromat_it_desk_bot.callback_handlers import CallbackContext
+    from agromat_help_desk_bot.callback_handlers import CallbackContext
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -198,7 +198,7 @@ async def _process_unlink_callback(query: CallbackQuery, accept: bool) -> None:
 
 async def _on_accept_issue_callback(query: CallbackQuery) -> None:
     """Handle callback of pressing accept issue button."""
-    from agromat_it_desk_bot import callback_handlers
+    from agromat_help_desk_bot import callback_handlers
 
     callback_message: Message | InaccessibleMessage | None = query.message
     if (not isinstance(callback_message, Message)

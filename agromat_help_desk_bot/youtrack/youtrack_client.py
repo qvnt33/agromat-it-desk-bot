@@ -7,7 +7,7 @@ import logging
 from collections.abc import Iterable, Mapping
 from typing import Any, TypedDict, cast
 
-from agromat_it_desk_bot.config import YT_BASE_URL, YT_TOKEN
+from agromat_help_desk_bot.config import YT_BASE_URL, YT_TOKEN
 
 requests: Any = importlib.import_module('requests')
 

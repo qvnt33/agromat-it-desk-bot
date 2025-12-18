@@ -5,8 +5,8 @@ from typing import cast
 
 import pytest
 
-import agromat_it_desk_bot.callback_handlers as handlers
-from agromat_it_desk_bot.messages import Msg, render
+import agromat_help_desk_bot.callback_handlers as handlers
+from agromat_help_desk_bot.messages import Msg, render
 from tests.conftest import FakeTelegramSender
 
 pytestmark = pytest.mark.asyncio

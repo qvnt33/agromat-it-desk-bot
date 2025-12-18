@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from agromat_it_desk_bot import main
+from agromat_help_desk_bot import main
 
 
 def test_edit_window_expired_true() -> None:

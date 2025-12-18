@@ -9,20 +9,20 @@ from contextlib import asynccontextmanager
 from aiogram import Bot, Dispatcher
 from fastapi import FastAPI
 
-from agromat_it_desk_bot.alerts.archiver import IssueArchiverWorker
-from agromat_it_desk_bot.alerts.new_status import build_new_status_alert_worker
-from agromat_it_desk_bot.api.telegram import router as telegram_router
-from agromat_it_desk_bot.api.youtrack import router as youtrack_router
-from agromat_it_desk_bot.config import BOT_TOKEN
-from agromat_it_desk_bot.schedule import (
+from agromat_help_desk_bot.alerts.archiver import IssueArchiverWorker
+from agromat_help_desk_bot.alerts.new_status import build_new_status_alert_worker
+from agromat_help_desk_bot.api.telegram import router as telegram_router
+from agromat_help_desk_bot.api.youtrack import router as youtrack_router
+from agromat_help_desk_bot.config import BOT_TOKEN
+from agromat_help_desk_bot.schedule import (
     DailyReminder,
     SchedulePublisher,
     build_daily_reminder,
     build_schedule_publisher,
 )
-from agromat_it_desk_bot.telegram import telegram_aiogram, telegram_commands
-from agromat_it_desk_bot.telegram.telegram_sender import AiogramTelegramSender
-from agromat_it_desk_bot.utils import configure_logging
+from agromat_help_desk_bot.telegram import telegram_aiogram, telegram_commands
+from agromat_help_desk_bot.telegram.telegram_sender import AiogramTelegramSender
+from agromat_help_desk_bot.utils import configure_logging
 
 logger: logging.Logger = logging.getLogger(__name__)
 

@@ -12,12 +12,12 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
-from agromat_it_desk_bot.config import (
+from agromat_help_desk_bot.config import (
     DESCRIPTION_MAX_LEN,
     LOG_LEVEL,
     TELEGRAM_MAIN_MESSAGE_TEMPLATE,
 )
-from agromat_it_desk_bot.messages import Msg, render
+from agromat_help_desk_bot.messages import Msg, render
 
 logger: logging.Logger = logging.getLogger(__name__)
 

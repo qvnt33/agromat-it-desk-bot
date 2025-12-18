@@ -6,21 +6,21 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
-from agromat_it_desk_bot.config import (
+from agromat_help_desk_bot.config import (
     NEW_STATUS_ALERT_ENABLED,
     NEW_STATUS_ALERT_POLL_SECONDS,
     NEW_STATUS_ALERT_STATE_NAME,
     NEW_STATUS_ALERT_STEPS,
     NEW_STATUS_ALERT_SUFFIX_DEFAULT,
 )
-from agromat_it_desk_bot.storage import (
+from agromat_help_desk_bot.storage import (
     clear_issue_alerts,
     fetch_alert_suffix,
     fetch_due_issue_alerts,
     mark_issue_alert_sent,
     upsert_issue_alerts,
 )
-from agromat_it_desk_bot.telegram.telegram_sender import TelegramSender, escape_html
+from agromat_help_desk_bot.telegram.telegram_sender import TelegramSender, escape_html
 
 logger: logging.Logger = logging.getLogger(__name__)
 

@@ -8,7 +8,7 @@ import time
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-from agromat_it_desk_bot.config import (
+from agromat_help_desk_bot.config import (
     PROJECT_ID,
     PROJECT_KEY,
     YT_BASE_URL,

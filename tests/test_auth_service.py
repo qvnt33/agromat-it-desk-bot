@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-import agromat_it_desk_bot.auth.service as auth_service
-import agromat_it_desk_bot.config as config
-from agromat_it_desk_bot.auth.service import RegistrationOutcome
+import agromat_help_desk_bot.auth.service as auth_service
+import agromat_help_desk_bot.config as config
+from agromat_help_desk_bot.auth.service import RegistrationOutcome
 
 
 def patch_auth_flow(

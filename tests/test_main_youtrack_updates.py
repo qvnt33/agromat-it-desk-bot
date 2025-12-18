@@ -12,9 +12,9 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.methods.base import TelegramMethod
 from fastapi import Request
 
-import agromat_it_desk_bot.config as config
-from agromat_it_desk_bot import main
-from agromat_it_desk_bot.messages import Msg, render
+import agromat_help_desk_bot.config as config
+from agromat_help_desk_bot import main
+from agromat_help_desk_bot.messages import Msg, render
 from tests.conftest import FakeTelegramSender
 
 

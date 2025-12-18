@@ -9,8 +9,8 @@ from typing import Any
 from aiogram import BaseMiddleware
 from aiogram.types import Message, TelegramObject
 
-from agromat_it_desk_bot.auth import is_authorized
-from agromat_it_desk_bot.telegram.telegram_commands import notify_authorization_required
+from agromat_help_desk_bot.auth import is_authorized
+from agromat_help_desk_bot.telegram.telegram_commands import notify_authorization_required
 
 
 class AuthorizationMiddleware(BaseMiddleware):

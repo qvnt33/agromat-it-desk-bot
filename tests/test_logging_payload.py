@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from agromat_it_desk_bot import main
-from agromat_it_desk_bot.messages import Msg, render
+from agromat_help_desk_bot import main
+from agromat_help_desk_bot.messages import Msg, render
 
 
 def test_prepare_payload_for_logging_sanitizes_email_description() -> None:

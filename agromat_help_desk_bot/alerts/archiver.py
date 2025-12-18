@@ -6,16 +6,16 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
-from agromat_it_desk_bot.config import (
+from agromat_help_desk_bot.config import (
     ARCHIVE_IDLE_THRESHOLD_SECONDS,
     ARCHIVE_SCAN_INTERVAL_SECONDS,
     YT_BASE_URL,
 )
-from agromat_it_desk_bot.messages import Msg, render
-from agromat_it_desk_bot.storage import fetch_stale_issue_messages, mark_issue_archived
-from agromat_it_desk_bot.telegram.telegram_sender import TelegramSender
-from agromat_it_desk_bot.utils import format_telegram_message, normalize_issue_summary, strip_html
-from agromat_it_desk_bot.youtrack.youtrack_service import fetch_issue_details
+from agromat_help_desk_bot.messages import Msg, render
+from agromat_help_desk_bot.storage import fetch_stale_issue_messages, mark_issue_archived
+from agromat_help_desk_bot.telegram.telegram_sender import TelegramSender
+from agromat_help_desk_bot.utils import format_telegram_message, normalize_issue_summary, strip_html
+from agromat_help_desk_bot.youtrack.youtrack_service import fetch_issue_details
 
 logger: logging.Logger = logging.getLogger(__name__)
 

@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-import agromat_it_desk_bot.youtrack.youtrack_auth_service as auth_service
+import agromat_help_desk_bot.youtrack.youtrack_auth_service as auth_service
 
 requests: Any = importlib.import_module('requests')
 

@@ -10,7 +10,7 @@ from datetime import date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from agromat_it_desk_bot.config import (
+from agromat_help_desk_bot.config import (
     SCHEDULE_CALENDAR_NAME,
     SCHEDULE_DAILY_REMINDER_HOUR,
     SCHEDULE_DAILY_REMINDER_MINUTE,
@@ -25,8 +25,8 @@ from agromat_it_desk_bot.config import (
     SCHEDULE_TIMEZONE,
     TELEGRAM_CHAT_ID,
 )
-from agromat_it_desk_bot.messages import Msg, render
-from agromat_it_desk_bot.telegram.telegram_sender import TelegramSender, escape_html
+from agromat_help_desk_bot.messages import Msg, render
+from agromat_help_desk_bot.telegram.telegram_sender import TelegramSender, escape_html
 
 logger: logging.Logger = logging.getLogger(__name__)
 _WEEKDAY_LABELS: tuple[str, ...] = ('Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд')

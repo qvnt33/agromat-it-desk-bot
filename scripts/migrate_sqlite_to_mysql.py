@@ -6,13 +6,13 @@ import os
 import sqlite3
 from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-import pymysql
+import pymysql  # type: ignore[import-untyped]
 from dotenv import load_dotenv
 
-import agromat_it_desk_bot.config as config
-from agromat_it_desk_bot.storage.database import migrate
+import agromat_help_desk_bot.config as config
+from agromat_help_desk_bot.storage.database import migrate
 
 load_dotenv()
 
@@ -20,7 +20,6 @@ load_dotenv()
 def _sqlite_rows(connection: sqlite3.Connection, query: str) -> Iterable[Mapping[str, Any]]:
     """Yield rows from SQLite query with dict-like access."""
     cursor = connection.execute(query)
-    cursor.row_factory = sqlite3.Row
     for row in cursor.fetchall():
         yield row
 
@@ -30,7 +29,7 @@ def _connect_sqlite() -> sqlite3.Connection:
     path_env: str | None = os.getenv('DATABASE_PATH')
     sqlite_path: Path = Path(path_env) if path_env else config.DATABASE_PATH
     connection = sqlite3.connect(str(sqlite_path))
-    connection.row_factory = sqlite3.Row
+    connection.row_factory = cast(Any, sqlite3.Row)
     return connection
 
 

@@ -6,9 +6,9 @@ import re
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 
-from agromat_it_desk_bot.config import YT_BASE_URL
-from agromat_it_desk_bot.messages import Msg, render
-from agromat_it_desk_bot.utils import (
+from agromat_help_desk_bot.config import YT_BASE_URL
+from agromat_help_desk_bot.messages import Msg, render
+from agromat_help_desk_bot.utils import (
     extract_issue_assignee,
     extract_issue_author,
     extract_issue_id,

@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
-import agromat_it_desk_bot.auth.service as auth_service
-import agromat_it_desk_bot.config as config
-import agromat_it_desk_bot.storage.database as db
-import agromat_it_desk_bot.telegram.telegram_commands as telegram_commands
-from agromat_it_desk_bot.telegram.telegram_sender import TelegramSender
+import agromat_help_desk_bot.auth.service as auth_service
+import agromat_help_desk_bot.config as config
+import agromat_help_desk_bot.storage.database as db
+import agromat_help_desk_bot.telegram.telegram_commands as telegram_commands
+from agromat_help_desk_bot.telegram.telegram_sender import TelegramSender
 
 
 @pytest.fixture(autouse=True)

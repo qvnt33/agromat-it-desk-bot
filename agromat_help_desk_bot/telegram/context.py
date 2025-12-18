@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agromat_it_desk_bot.telegram.telegram_sender import TelegramSender
+from agromat_help_desk_bot.telegram.telegram_sender import TelegramSender
 
 _sender: TelegramSender | None = None
 

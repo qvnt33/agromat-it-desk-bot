@@ -7,8 +7,8 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 
-from agromat_it_desk_bot.callback_handlers import verify_telegram_secret
-from agromat_it_desk_bot.telegram import telegram_aiogram
+from agromat_help_desk_bot.callback_handlers import verify_telegram_secret
+from agromat_help_desk_bot.telegram import telegram_aiogram
 
 router = APIRouter()
 logger: logging.Logger = logging.getLogger(__name__)
